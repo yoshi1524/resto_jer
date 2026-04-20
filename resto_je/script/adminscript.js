@@ -209,7 +209,7 @@ function openEditModal(id) {
   openModal('itemModal');
 }
 
-// FIX: saveItem() now calls api.php instead of localStorage
+
 function saveItem() {
   const name  = document.getElementById('fName').value.trim();
   const price = parseFloat(document.getElementById('fPrice').value);
@@ -242,7 +242,7 @@ function saveItem() {
     .catch(err => toast('Network error: ' + err.message, 'error'));
 }
 
-// FIX: deleteItem() now calls api.php (soft delete/archive)
+
 function deleteItem(id) {
   if (!confirm('Delete this menu item? It will be archived.')) return;
   apiPost({ action: 'delete_menu_item', item_id: id })
@@ -494,12 +494,12 @@ function renderInventory() {
   }).join('');
 }
 
-function setInventoryMode(mode) {
-  inventoryMode = mode;
-  document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
-  document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
-  renderInventory();
-}
+//function setInventoryMode(mode) {
+ // inventoryMode = mode;
+ // document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
+  //document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
+  //renderInventory();
+//}
 
 function openRestockModal() {
   populateRestockSelect(null);
