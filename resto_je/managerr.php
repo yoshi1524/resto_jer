@@ -145,7 +145,7 @@ $users = getUsers($conn);
         <div>
           <div class="section-title">Inventory Tracking</div>
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <!--<button class="btn btn-ghost btn-sm active" id="inventoryModeItems" onclick="setInventoryMode('items')">Items</button>-->
+            
             <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
           </div>
         </div>
