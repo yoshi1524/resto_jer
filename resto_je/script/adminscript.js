@@ -81,47 +81,47 @@ function renderMenuGrid() {
     </div>`;
   }).join('');
 }
-function addToCart(id) {
-  const item = menuItems.find(i=>i.id===id);
-  if (!item || item.stock===0 || item.status==='unavailable') return;
-  const existing = cart.find(c=>c.id===id);
-  if (existing) {
-    if (existing.qty >= item.stock) { toast('Max stock reached!','error'); return; }
-    existing.qty++;
-  } else {
-    cart.push({id, name:item.name, price:item.price, qty:1, emoji:item.emoji||'🍽'});
-  }
-  renderCart();
-  toast(`${item.emoji||'🍽'} ${item.name} added!`, 'success');
-}
-function removeFromCart(id) {
-  const idx = cart.findIndex(c=>c.id===id);
-  if (idx===-1) return;
-  if (cart[idx].qty > 1) cart[idx].qty--;
-  else cart.splice(idx,1);
-  renderCart();
-}
-function clearCart() { cart = []; document.getElementById('discountInput').value=''; document.getElementById('cashInput').value=''; document.getElementById('paymentMethod').value='cash'; document.getElementById('paymentRef').value=''; document.getElementById('customerName').value=''; renderCart(); }
-function renderCart() {
-  const el = document.getElementById('cartItems');
-  if (!cart.length) {
-    el.innerHTML = `<div class="cart-empty"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg><span>Cart is empty</span></div>`;
-  } else {
-    el.innerHTML = cart.map(c=>`<div class="cart-item">
-      <span style="font-size:24px;">${c.emoji}</span>
-      <div class="cart-item-info">
-        <div class="cart-item-name">${c.name}</div>
-        <div class="cart-item-price">₱${(c.price*c.qty).toFixed(2)}</div>
-      </div>
-      <div class="qty-ctrl">
-        <button class="qty-btn" onclick="removeFromCart(${c.id})">−</button>
-        <span class="qty-num">${c.qty}</span>
-        <button class="qty-btn" onclick="addToCart(${c.id})">+</button>
-      </div>
-    </div>`).join('');
-  }
-  renderCartFooter();
-}
+//function addToCart(id) {
+  //const item = menuItems.find(i=>i.id===id);
+  //if (!item || item.stock===0 || item.status==='unavailable') return;
+  //const existing = cart.find(c=>c.id===id);
+  //if (existing) {
+    //if (existing.qty >= item.stock) { toast('Max stock reached!','error'); return; }
+    //existing.qty++;
+  //} else {
+    //cart.push({id, name:item.name, price:item.price, qty:1, emoji:item.emoji||'🍽'});
+  //}
+  //renderCart();
+  //toast(`${item.emoji||'🍽'} ${item.name} added!`, 'success');
+//}
+//function removeFromCart(id) {
+  //const idx = cart.findIndex(c=>c.id===id);
+  //if (idx===-1) return;
+  //if (cart[idx].qty > 1) cart[idx].qty--;
+  //else cart.splice(idx,1);
+  //renderCart();
+//}//
+//function clearCart() { cart = []; document.getElementById('discountInput').value=''; document.getElementById('cashInput').value=''; document.getElementById('paymentMethod').value='cash'; document.getElementById('paymentRef').value=''; document.getElementById('customerName').value=''; renderCart(); }
+//function renderCart() {
+  //const el = document.getElementById('cartItems')//;
+//  if (!cart.length) {
+  //  el.innerHTML = `<div class="cart-empty"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg><span>Cart is empty</span></div>`;
+ // } else {
+   // el.innerHTML = cart.map(c=>`<div class="cart-item">
+     // <span style="font-size:24px;">${c.emoji}</span>
+      //<div class="cart-item-info">
+        //<div class="cart-item-name">${c.name}</div>
+        //<div class="cart-item-price">₱${(c.price*c.qty).toFixed(2)}</div>
+      //</div>
+      //<div class="qty-ctrl">
+        //<button class="qty-btn" onclick="removeFromCart(${c.id})">−</button>
+        //<span class="qty-num">${c.qty}</span>
+        //<button class="qty-btn" onclick="addToCart(${c.id})">+</button>
+      //</div>
+ //   </div>`).join('');
+  //}
+  //renderCartFooter();
+//}
 function renderCartFooter() {
   const subtotal = cart.reduce((s,c)=>s+c.price*c.qty,0);
   const discPct = parseFloat(document.getElementById('discountInput').value)||0;
