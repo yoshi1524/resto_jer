@@ -194,6 +194,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div class="section-header">
         <div>
           <div class="section-title">Inventory Tracking</div>
+          <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
         </div>
         <button class="btn btn-accent" onclick="openRestockModal()">+ Restock</button>
       </div>
@@ -410,7 +411,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div style="font-size:12px;color:var(--text3);margin-top:8px;">Change</div>
       <div class="receipt-change" id="rcChange"></div>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us! 🙏</div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!</div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('receiptModal')">Close</button>
       <button class="btn btn-accent" onclick="printReceipt()">🖨 Print</button>
