@@ -3,8 +3,7 @@ require 'config.php';
 $conn = dbConnect();
 ensureSchema($conn);
 requireLogin();
-// FIX: Removed 'commissary' — not a valid role in your system.
-// Valid roles are: admin, manager, staff
+
 requireRole('staff', 'manager', 'admin');
 $user = currentUser();
 ?>

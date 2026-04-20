@@ -7,13 +7,13 @@ ensureSchema($conn);
 requireLogin();
 $user = currentUser();
 
-// FIX: Read php://input ONCE — calling it twice returns empty on the second call
+
 $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true) ?: [];
 $action = $payload['action'] ?? $_POST['action'] ?? null;
 
 // ─────────────────────────────────────────────
-// GET MENU ITEMS (NEW — was missing entirely)
+// GET MENU ITEMS
 // ─────────────────────────────────────────────
 if ($action === 'get_menu_items') {
     try {
@@ -35,7 +35,7 @@ if ($action === 'get_menu_items') {
 }
 
 // ─────────────────────────────────────────────
-// ADD MENU ITEM (NEW — was missing entirely)
+// ADD MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'add_menu_item') {
     $item = $payload['item'] ?? null;
@@ -75,7 +75,7 @@ if ($action === 'add_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// UPDATE MENU ITEM (NEW — was missing entirely)
+// UPDATE MENU ITEM
 // ─────────────────────────────────────────────
 if ($action === 'update_menu_item') {
     $item = $payload['item'] ?? null;
@@ -115,7 +115,7 @@ if ($action === 'update_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// DELETE MENU ITEM (NEW — was missing entirely)
+// DELETE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'delete_menu_item') {
     $itemId = intval($payload['item_id'] ?? 0);
@@ -126,7 +126,7 @@ if ($action === 'delete_menu_item') {
     }
 
     try {
-        // Soft-delete: archive instead of hard delete to preserve order history
+        
         $stmt = $conn->prepare("UPDATE menu_items SET status = 'archived' WHERE id = ?");
         $stmt->bind_param("i", $itemId);
         $stmt->execute();
@@ -140,7 +140,7 @@ if ($action === 'delete_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// DEDUCT STOCK AFTER CHECKOUT (NEW — was missing)
+// DEDUCT STOCK AFTER CHECKOUT 
 // ─────────────────────────────────────────────
 if ($action === 'deduct_stock') {
     $items = $payload['items'] ?? [];
@@ -171,7 +171,7 @@ if ($action === 'deduct_stock') {
 }
 
 // ─────────────────────────────────────────────
-// RESTOCK MENU ITEM (NEW — was missing)
+// RESTOCK MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'restock_menu_item') {
     $itemId   = intval($payload['item_id'] ?? 0);
@@ -200,7 +200,7 @@ if ($action === 'restock_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// SAVE ORDER (unchanged, was working)
+// SAVE ORDER 
 // ─────────────────────────────────────────────
 if ($action === 'save_order') {
     $order = $payload['order'] ?? null;
@@ -225,7 +225,7 @@ if ($action === 'save_order') {
 }
 
 // ─────────────────────────────────────────────
-// SAVE INGREDIENT (unchanged, was working)
+// SAVE INGREDIENT
 // ─────────────────────────────────────────────
 if ($action === 'save_ingredient') {
     $ingredient = $payload['ingredient'] ?? null;
@@ -247,7 +247,7 @@ if ($action === 'save_ingredient') {
 }
 
 // ─────────────────────────────────────────────
-// GET INGREDIENTS (unchanged, was working)
+// GET INGREDIENTS 
 // ─────────────────────────────────────────────
 if ($action === 'get_ingredients') {
     try {
@@ -261,7 +261,7 @@ if ($action === 'get_ingredients') {
 }
 
 // ─────────────────────────────────────────────
-// UPDATE INGREDIENT STOCK (unchanged, was working)
+// UPDATE INGREDIENT STOCK 
 // ─────────────────────────────────────────────
 if ($action === 'update_ingredient_stock') {
     $ingredientId = intval($payload['ingredient_id'] ?? 0);
@@ -285,7 +285,7 @@ if ($action === 'update_ingredient_stock') {
 }
 
 // ─────────────────────────────────────────────
-// PERFORM RECONCILIATION (unchanged, was working)
+// PERFORM RECONCILIATION 
 // ─────────────────────────────────────────────
 if ($action === 'perform_reconciliation') {
     try {
@@ -299,7 +299,7 @@ if ($action === 'perform_reconciliation') {
 }
 
 // ─────────────────────────────────────────────
-// ARCHIVE MENU ITEM (was duplicating input read — now fixed)
+// ARCHIVE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'archive_menu_item') {
     $itemId = intval($payload['item_id'] ?? 0);

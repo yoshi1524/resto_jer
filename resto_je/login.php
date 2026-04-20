@@ -1,10 +1,10 @@
 <?php
 if (isset($_SESSION['user_id'])) {
-    // If they are already logged in, send them to their dashboard
+    
     if ($_SESSION['role'] === 'admin') {
         header('Location: admin.php');
     } elseif ($_SESSION['role'] === 'manager') {
-        header('Location: manager.php'); // Ensure this is present
+        header('Location: manager.php');
     } else {
         header('Location: cashier.php');
     }
