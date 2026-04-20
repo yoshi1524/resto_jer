@@ -205,8 +205,8 @@ $users = getUsers($conn);
       </div>
     </div>
 
-  </div><!-- /.main -->
-</div><!-- /.app -->
+  </div>
+</div>
 
 <!-- MODALS -->
 <div class="modal-overlay" id="itemModal">
