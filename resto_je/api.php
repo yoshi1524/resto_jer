@@ -47,7 +47,7 @@ if ($action === 'add_menu_item') {
 
     $name     = trim($item['name']);
     $price    = floatval($item['price']);
-    $category = trim($item['category'] ?? '');
+    $category = trim($item['category'] ?? 'Uncategorized');
     $stock    = intval($item['stock'] ?? 0);
     $emoji    = trim($item['emoji'] ?? '🍽');
     $status   = trim($item['status'] ?? 'available');

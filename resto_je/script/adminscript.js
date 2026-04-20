@@ -30,7 +30,6 @@ function apiPost(payload) {
   });
 }
 
-// FIX: Load menu from DB instead of localStorage
 function loadMenuFromDB() {
   return apiPost({ action: 'get_menu_items' })
     .then(result => {

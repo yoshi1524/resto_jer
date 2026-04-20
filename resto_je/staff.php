@@ -52,8 +52,6 @@ $user = currentUser();
           <div class="topbar-title">Order &amp; Checkout</div>
         </div>
         <div class="topbar-actions">
-          <!-- FIX: .tabs div must exist before adminscript.js runs renderCategoryTabs()
-               so it doesn't crash on querySelector('.tabs') returning null -->
           <div class="tabs">
             <div class="tab active" onclick="filterMenuCat('all',this)">All</div>
           </div>

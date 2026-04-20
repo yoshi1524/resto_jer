@@ -56,7 +56,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'archi
     } else {
         $error = "Record not found.";
     }
-    // FIX: Added exit after redirect so PHP stops executing
     header("Location: admin.php");
     exit;
 }
@@ -332,10 +331,6 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
   <div class="modal">
     <div class="modal-title" id="itemModalTitle">Add Menu Item</div>
     <div class="form-row">
-      <div class="form-group">
-        <label class="form-label">Emoji Icon</label>
-        <input class="form-input" id="fEmoji" placeholder="e.g. 🍕" maxlength="4"/>
-      </div>
       <div class="form-group">
         <label class="form-label">Item Name *</label>
         <input class="form-input" id="fName" placeholder="Item name"/>

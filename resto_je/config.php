@@ -242,7 +242,7 @@ function ensureSchema(mysqli $conn) {
     $row = $result->fetch_assoc();
     if (isset($row['count']) && (int)$row['count'] === 0) {
         $passwordHash = password_hash('admin123', PASSWORD_DEFAULT);
-        $conn->query("INSERT INTO users (username, password, role, status) VALUES ('admin', '{$conn->real_escape_string($passwordHash)}', 'admin', 'active')");
+        $conn->query("users (username, password, role, status) VALUES ('admin', '{$conn->real_escape_string($passwordHash)}', 'admin', 'active')");
         logAction($conn, null, 'system', 'default_admin_created', 'Created default admin user');
         logTransaction($conn, null, 'system', 'user', null, 'admin', 'create', 'Default admin user created', null, array('username' => 'admin', 'role' => 'admin'));
     }
@@ -288,7 +288,7 @@ function createUser(mysqli $conn, string $username, string $password, string $ro
         $role = 'staff';
     }
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $conn->prepare("INSERT INTO users (username, password, role, status) VALUES (?, ?, ?, 'active')");
+    $stmt = $conn->prepare("users (username, password, role, status) VALUES (?, ?, ?, 'active')");
     $stmt->bind_param('sss', $username, $passwordHash, $role);
     $success = $stmt->execute();
     $stmt->close();
@@ -317,7 +317,7 @@ function logAction(mysqli $conn, ?int $userId, ?string $username, string $action
         $checkStmt->close();
     }
     
-    $stmt = $conn->prepare("INSERT INTO user_logs (user_id, username, action, detail) VALUES (?, ?, ?, ?)");
+    $stmt = $conn->prepare("user_logs (user_id, username, action, detail) VALUES (?, ?, ?, ?)");
     $stmt->bind_param('isss', $userId, $username, $action, $detail);
     $stmt->execute();
     $stmt->close();
@@ -350,7 +350,7 @@ function logTransaction(mysqli $conn, ?int $userId, ?string $username, string $e
     }
     
     $stmt = $conn->prepare(
-        "INSERT INTO transaction_logs (transaction_type, user_id, username, entity_type, entity_id, entity_name, action, description, old_value, new_value, status, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "transaction_logs (transaction_type, user_id, username, entity_type, entity_id, entity_name, action, description, old_value, new_value, status, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->bind_param(
         'sississssssi',
@@ -384,7 +384,7 @@ function logInventoryMovement(mysqli $conn, string $type, ?int $ingredientId, ?i
     }
     
     $stmt = $conn->prepare(
-        "INSERT INTO inventory_movements (type, ingredient_id, menu_item_id, quantity_change, old_quantity, new_quantity, reason, reference_id, reference_type, recorded_by, recorded_by_username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "inventory_movements (type, ingredient_id, menu_item_id, quantity_change, old_quantity, new_quantity, reason, reference_id, reference_type, recorded_by, recorded_by_username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
     $stmt->bind_param(
         'siidddsissi',
@@ -434,7 +434,7 @@ function saveOrder(mysqli $conn, ?int $userId, ?string $username, array $orderDa
     $now = date('Y-m-d H:i:s');
 
     $stmt = $conn->prepare(
-        'INSERT INTO orders (order_number, user_id, username, customer_name, table_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        'orders (order_number, user_id, username, customer_name, table_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
     );
     $stmt->bind_param(
         'sisssdddssssssdds',
@@ -461,7 +461,7 @@ function saveOrder(mysqli $conn, ?int $userId, ?string $username, array $orderDa
     $stmt->close();
 
     $itemStmt = $conn->prepare(
-        'INSERT INTO order_items (order_id, menu_item_id, item_name, emoji, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        'order_items (order_id, menu_item_id, item_name, emoji, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?, ?, ?)'
     );
     foreach ($orderData['items'] as $item) {
         $itemId = null;
@@ -518,7 +518,7 @@ function saveIngredient(mysqli $conn, ?int $userId, ?string $username, array $in
 
     try {
         $stmt = $conn->prepare(
-            'INSERT INTO ingredients (name, unit, stock, min_stock, unit_price, status) VALUES (?, ?, ?, ?, ?, ?)'
+            'ingredients (name, unit, stock, min_stock, unit_price, status) VALUES (?, ?, ?, ?, ?, ?)'
         );
         $stmt->bind_param('ssddds', $name, $unit, $stock, $minStock, $unitPrice, $status);
         $stmt->execute();
@@ -597,7 +597,7 @@ function performDailyReconciliation(mysqli $conn, ?int $userId, ?string $usernam
 
     $paymentMethods = ['cash', 'e_wallet', 'card', 'check', 'online', 'other'];
     $upsert = $conn->prepare(
-        'INSERT INTO payment_reconciliation (reconciliation_date, payment_method, expected_amount, actual_amount, variance, variance_percent, status, reconciled_by, notes, reconciled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE expected_amount = VALUES(expected_amount), actual_amount = VALUES(actual_amount), variance = VALUES(variance), variance_percent = VALUES(variance_percent), status = VALUES(status), reconciled_by = VALUES(reconciled_by), notes = VALUES(notes), reconciled_at = NOW()'
+        'payment_reconciliation (reconciliation_date, payment_method, expected_amount, actual_amount, variance, variance_percent, status, reconciled_by, notes, reconciled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE expected_amount = VALUES(expected_amount), actual_amount = VALUES(actual_amount), variance = VALUES(variance), variance_percent = VALUES(variance_percent), status = VALUES(status), reconciled_by = VALUES(reconciled_by), notes = VALUES(notes), reconciled_at = NOW()'
     );
 
     $rowsCreated = 0;
