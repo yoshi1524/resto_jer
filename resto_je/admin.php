@@ -185,8 +185,6 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
           <thead>
             <tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
           </thead>
-          <!-- FIX: tbody is now populated by adminscript.js via renderMenuTable()
-               which fetches from DB. The old PHP render was overwritten by JS anyway. -->
           <tbody id="menuTableBody"></tbody>
         </table>
       </div>
