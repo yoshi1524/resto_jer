@@ -422,6 +422,6 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- FIX: Was <link rel="script"> which does nothing. Now a proper script tag. -->
-<script src="script/adminscript.js"></script>
+<script src="script/adminscript.js?v=1"></script>
 </body>
 </html>

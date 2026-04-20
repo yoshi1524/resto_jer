@@ -1,8 +1,4 @@
-// ─────────────────────────────────────────────────────────────────
-// STATE
-// FIX: menuItems now comes from DB, not localStorage.
-// localStorage is only kept for transactions (pos_tx) as a
-// local session cache — orders are also saved to DB via api.php.
+
 // ─────────────────────────────────────────────────────────────────
 let menuItems = [];
 let ingredients = [];
@@ -10,7 +6,7 @@ let cart = [];
 let transactions = JSON.parse(localStorage.getItem('pos_tx') || '[]');
 let editingItemId = null;
 let activeCategory = 'all';
-let inventoryMode = 'items';
+let inventoryMode = 'ingredients'; 
 let nextId = 1;
 
 // ─────────────────────────────────────────────────────────────────
@@ -55,10 +51,8 @@ function loadIngredients() {
     });
 }
 
-// FIX: Removed saveMenu() to localStorage — no longer used for persistence.
-// Kept as no-op so any stray calls don't crash.
-function saveMenu() { /* DB is the source of truth now */ }
-function saveIngredients() { /* DB is the source of truth now */ }
+function saveMenu() {  }
+function saveIngredients() { }
 function saveTx() { localStorage.setItem('pos_tx', JSON.stringify(transactions)); }
 
 // ─────────────────────────────────────────────────────────────────
@@ -72,7 +66,7 @@ function showPage(page) {
   if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
   if (page === 'menu') {
-    // FIX: Always reload from DB when navigating to menu
+ 
     loadMenuFromDB().then(() => renderMenuTable());
   }
   if (page === 'inventory') {
@@ -494,12 +488,12 @@ function renderInventory() {
   }).join('');
 }
 
-//function setInventoryMode(mode) {
- // inventoryMode = mode;
- // document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
-  //document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
-  //renderInventory();
-//}
+function setInventoryMode(mode) {
+inventoryMode = mode;
+//document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
+document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
+renderInventory();
+}
 
 function openRestockModal() {
   populateRestockSelect(null);
@@ -719,7 +713,8 @@ function toast(msg, type = 'info') {
   container.appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
-
+console.log("Script is running with new changes!");
+alert("If you see this, the file updated!");
 // ─────────────────────────────────────────────────────────────────
 // INIT — load menu from DB on first load
 // ─────────────────────────────────────────────────────────────────
