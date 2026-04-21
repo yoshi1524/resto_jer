@@ -100,7 +100,7 @@ $user = currentUser();
         <div class="cart-panel">
           <div class="cart-header">
             <div class="cart-header-row">
-              <div class="cart-title">🧾 Current Order</div>
+              <div class="cart-title">Current Order</div>
               <button class="btn btn-ghost btn-sm" onclick="clearCart()">Clear</button>
             </div>
             <div class="table-selector">
@@ -245,7 +245,7 @@ $user = currentUser();
       <div style="font-size:12px;color:var(--text3);margin-top:8px;">Change</div>
       <div class="receipt-change" id="rcChange"></div>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!</div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us! 🙏</div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('receiptModal')">Close</button>
       <button class="btn btn-accent" onclick="printReceipt()">🖨 Print</button>
@@ -312,7 +312,7 @@ function openPaymentConfirm() {
   const change   = method === 'cash' ? (cash - total) : 0;
   const discLabel = disc.percent > 0 ? `Discount — ${disc.label}` : 'Discount';
 
-  const ICONS = { cash:, e_wallet:, online:  };
+  const ICONS = { cash: '💵', e_wallet: '📱', online: '🏦' };
   const LABELS = { cash: 'Cash Payment', e_wallet: 'E-Wallet · GCash / Maya', online: 'Online Bank Transfer' };
 
   document.getElementById('pcMethodIcon').textContent  = ICONS[method]  || '💵';
