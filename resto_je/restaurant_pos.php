@@ -960,7 +960,7 @@ function renderInventory() {
 
 function setInventoryMode(mode) {
   inventoryMode = mode;
-  document.getElementById('inventoryModeItems').classList.toggle('active', mode==='items');
+  //document.getElementById('inventoryModeItems').classList.toggle('active', mode==='items');
   document.getElementById('inventoryModeIngredients').classList.toggle('active', mode==='ingredients');
   renderInventory();
 }

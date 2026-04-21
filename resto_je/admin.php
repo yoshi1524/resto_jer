@@ -56,6 +56,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'archi
     } else {
         $error = "Record not found.";
     }
+    // FIX: Added exit after redirect so PHP stops executing
     header("Location: admin.php");
     exit;
 }
@@ -184,6 +185,8 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
           <thead>
             <tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
           </thead>
+          <!-- FIX: tbody is now populated by adminscript.js via renderMenuTable()
+               which fetches from DB. The old PHP render was overwritten by JS anyway. -->
           <tbody id="menuTableBody"></tbody>
         </table>
       </div>
@@ -194,10 +197,15 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div class="section-header">
         <div>
           <div class="section-title">Inventory Tracking</div>
-          <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
+          <div style="display:flex;gap:8px;margin-top:10px;">
+            <button class="btn btn-ghost btn-sm active" id="inventoryModeItems" onclick="setInventoryMode('items')">Items</button>
+            <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
+          </div>
         </div>
         <button class="btn btn-accent" onclick="openRestockModal()">+ Restock</button>
       </div>
+      <!-- FIX: Stat cards now have JS-updatable IDs (invInStock etc.)
+           PHP values are used as initial server-rendered values; JS updates them on navigation -->
       <div class="grid-4" style="margin-bottom:4px;">
         <div class="stat-card green">
           <div class="stat-label">In Stock</div>
@@ -327,6 +335,10 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
     <div class="modal-title" id="itemModalTitle">Add Menu Item</div>
     <div class="form-row">
       <div class="form-group">
+        <label class="form-label">Emoji Icon</label>
+        <input class="form-input" id="fEmoji" placeholder="e.g. 🍕" maxlength="4"/>
+      </div>
+      <div class="form-group">
         <label class="form-label">Item Name *</label>
         <input class="form-input" id="fName" placeholder="Item name"/>
       </div>
@@ -411,7 +423,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div style="font-size:12px;color:var(--text3);margin-top:8px;">Change</div>
       <div class="receipt-change" id="rcChange"></div>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!</div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!   </div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('receiptModal')">Close</button>
       <button class="btn btn-accent" onclick="printReceipt()">🖨 Print</button>
@@ -422,6 +434,6 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
 <div class="toast-container" id="toastContainer"></div>
 
 <!-- FIX: Was <link rel="script"> which does nothing. Now a proper script tag. -->
-<script src="script/adminscript.js?v=1"></script>
+<script src="script/adminscript.js"></script>
 </body>
 </html>

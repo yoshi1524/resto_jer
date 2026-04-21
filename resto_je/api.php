@@ -301,19 +301,23 @@ if ($action === 'perform_reconciliation') {
 // ─────────────────────────────────────────────
 // ARCHIVE MENU ITEM 
 // ─────────────────────────────────────────────
+// api.php
 if ($action === 'archive_menu_item') {
     $itemId = intval($payload['item_id'] ?? 0);
-    if ($itemId <= 0) {
-        http_response_code(400);
-        echo json_encode(['success' => false, 'message' => 'Valid item ID is required.']);
-        exit;
-    }
+    
+    // RE-DEFINE OR CHECK USER HERE
+    $currentUser = currentUser(); 
+    $uId = $currentUser['id'] ?? 0;
+    $uName = $currentUser['username'] ?? 'System';
 
     try {
         $stmt = $conn->prepare("UPDATE menu_items SET status = 'archived' WHERE id = ?");
         $stmt->bind_param("i", $itemId);
         $stmt->execute();
-        logAction($conn, $user['id'], $user['username'], 'archive_menu_item', "Archived menu item #{$itemId}");
+        
+        // Use the safe variables instead of just $user['id']
+        logAction($conn, $uId, $uName, 'archive_menu_item', "Archived menu item #{$itemId}");
+        
         echo json_encode(['success' => true]);
     } catch (Exception $ex) {
         http_response_code(500);

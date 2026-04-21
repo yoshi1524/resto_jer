@@ -18,7 +18,6 @@ function dbConnect() {
 }
 
 function ensureSchema(mysqli $conn) {
-    // Users table
     $conn->query("CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(50) NOT NULL UNIQUE,
@@ -30,7 +29,6 @@ function ensureSchema(mysqli $conn) {
         INDEX(username), INDEX(role), INDEX(status), INDEX(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Menu items table
     $conn->query("CREATE TABLE IF NOT EXISTS menu_items (
         id INT AUTO_INCREMENT PRIMARY KEY,
         emoji VARCHAR(10) NULL,
@@ -40,13 +38,15 @@ function ensureSchema(mysqli $conn) {
         cost DECIMAL(10,2) NOT NULL DEFAULT 0,
         stock INT NOT NULL DEFAULT 0,
         min_stock INT NOT NULL DEFAULT 5,
-        status ENUM('available','unavailable') NOT NULL DEFAULT 'available',
+        status ENUM('available','unavailable','archived') NOT NULL DEFAULT 'available',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         INDEX(name), INDEX(category), INDEX(status), INDEX(stock), INDEX(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Menu item history for audit trail
+    // FIX: Add 'archived' to status ENUM if it doesn't exist yet (for existing DBs)
+    $conn->query("ALTER TABLE menu_items MODIFY COLUMN status ENUM('available','unavailable','archived') NOT NULL DEFAULT 'available'");
+
     $conn->query("CREATE TABLE IF NOT EXISTS menu_item_history (
         id INT AUTO_INCREMENT PRIMARY KEY,
         menu_item_id INT NOT NULL,
@@ -61,7 +61,6 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_menu_item_history_user FOREIGN KEY (changed_by) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Ingredients table
     $conn->query("CREATE TABLE IF NOT EXISTS ingredients (
         id INT AUTO_INCREMENT PRIMARY KEY,
         name VARCHAR(100) NOT NULL UNIQUE,
@@ -75,7 +74,6 @@ function ensureSchema(mysqli $conn) {
         INDEX(name), INDEX(status), INDEX(stock), INDEX(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Inventory movements table - records EVERY stock change
     $conn->query("CREATE TABLE IF NOT EXISTS inventory_movements (
         id INT AUTO_INCREMENT PRIMARY KEY,
         type ENUM('in','out','adjustment','return','damage','expired') NOT NULL,
@@ -96,7 +94,6 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_inventory_movements_user FOREIGN KEY (recorded_by) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Orders table
     $conn->query("CREATE TABLE IF NOT EXISTS orders (
         id INT AUTO_INCREMENT PRIMARY KEY,
         order_number VARCHAR(50) NOT NULL UNIQUE,
@@ -124,9 +121,10 @@ function ensureSchema(mysqli $conn) {
         INDEX(order_number), INDEX(user_id), INDEX(status), INDEX(payment_method), INDEX(created_at), INDEX(completed_at), INDEX(total),
         CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Safe ALTER — adds missing columns to existing installs without breaking new ones
     $conn->query("ALTER TABLE orders
         MODIFY COLUMN payment_method ENUM('cash','e_wallet','card','check','online','other') NOT NULL DEFAULT 'cash',
-        ADD COLUMN IF NOT EXISTS order_number VARCHAR(50) NOT NULL UNIQUE,
         ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS discount_percent DECIMAL(5,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS discount_type ENUM('regular','pwd','senior') NOT NULL DEFAULT 'regular',
@@ -136,7 +134,6 @@ function ensureSchema(mysqli $conn) {
         ADD COLUMN IF NOT EXISTS change_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS completed_at DATETIME NULL");
 
-    // Order items table
     $conn->query("CREATE TABLE IF NOT EXISTS order_items (
         id INT AUTO_INCREMENT PRIMARY KEY,
         order_id INT NOT NULL,
@@ -153,11 +150,11 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_order_items_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
         CONSTRAINT fk_order_items_menu FOREIGN KEY (menu_item_id) REFERENCES menu_items(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     $conn->query("ALTER TABLE order_items
-        ADD COLUMN IF NOT EXISTS item_total DECIMAL(10,2) NOT NULL,
+        ADD COLUMN IF NOT EXISTS item_total DECIMAL(10,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0");
 
-    // User logs table
     $conn->query("CREATE TABLE IF NOT EXISTS user_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         user_id INT NULL,
@@ -171,7 +168,6 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_user_logs_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Comprehensive transaction logs table - records EVERYTHING
     $conn->query("CREATE TABLE IF NOT EXISTS transaction_logs (
         id INT AUTO_INCREMENT PRIMARY KEY,
         transaction_type ENUM('order','menu_change','inventory_movement','user_action','payment','discount','refund','menu_item_created','menu_item_updated','menu_item_deleted','stock_adjustment','ingredient_change') NOT NULL,
@@ -197,7 +193,6 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_transaction_logs_parent FOREIGN KEY (related_transaction_log_id) REFERENCES transaction_logs(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Daily sales summary table
     $conn->query("CREATE TABLE IF NOT EXISTS daily_sales_summary (
         id INT AUTO_INCREMENT PRIMARY KEY,
         sale_date DATE NOT NULL UNIQUE,
@@ -218,7 +213,6 @@ function ensureSchema(mysqli $conn) {
         INDEX(sale_date)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Payment reconciliation table
     $conn->query("CREATE TABLE IF NOT EXISTS payment_reconciliation (
         id INT AUTO_INCREMENT PRIMARY KEY,
         reconciliation_date DATE NOT NULL,
@@ -237,18 +231,19 @@ function ensureSchema(mysqli $conn) {
         CONSTRAINT fk_payment_reconciliation_user FOREIGN KEY (reconciled_by) REFERENCES users(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
-    // Check if admin user exists, create if not
+    // Seed default admin if no users exist
     $result = $conn->query("SELECT COUNT(*) AS count FROM users");
     $row = $result->fetch_assoc();
     if (isset($row['count']) && (int)$row['count'] === 0) {
         $passwordHash = password_hash('admin123', PASSWORD_DEFAULT);
-        $conn->query("users (username, password, role, status) VALUES ('admin', '{$conn->real_escape_string($passwordHash)}', 'admin', 'active')");
+        $safe = $conn->real_escape_string($passwordHash);
+        // FIX: was missing INSERT INTO
+        $conn->query("INSERT INTO users (username, password, role, status) VALUES ('admin', '{$safe}', 'admin', 'active')");
         logAction($conn, null, 'system', 'default_admin_created', 'Created default admin user');
-        logTransaction($conn, null, 'system', 'user', null, 'admin', 'create', 'Default admin user created', null, array('username' => 'admin', 'role' => 'admin'));
     }
 }
 
-// ============ SESSION & AUTH FUNCTIONS ============
+// ============ SESSION & AUTH ============
 function currentUser(): ?array {
     return $_SESSION['user'] ?? null;
 }
@@ -281,14 +276,12 @@ function getUsers(mysqli $conn): array {
 
 function createUser(mysqli $conn, string $username, string $password, string $role): bool {
     $username = trim($username);
-    if ($username === '' || $password === '') {
-        return false;
-    }
-    if (!in_array($role, ['admin', 'manager', 'staff'], true)) {
-        $role = 'staff';
-    }
+    if ($username === '' || $password === '') return false;
+    if (!in_array($role, ['admin', 'manager', 'staff'], true)) $role = 'staff';
+
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    $stmt = $conn->prepare("users (username, password, role, status) VALUES (?, ?, ?, 'active')");
+    // FIX: was missing INSERT INTO
+    $stmt = $conn->prepare("INSERT INTO users (username, password, role, status) VALUES (?, ?, ?, 'active')");
     $stmt->bind_param('sss', $username, $passwordHash, $role);
     $success = $stmt->execute();
     $stmt->close();
@@ -299,25 +292,18 @@ function getLogs(mysqli $conn, int $limit = 50): array {
     $stmt = $conn->prepare("SELECT id, user_id, username, action, detail, action_time FROM user_logs ORDER BY action_time DESC LIMIT ?");
     $stmt->bind_param('i', $limit);
     $stmt->execute();
-    $result = $stmt->get_result();
-    return $result->fetch_all(MYSQLI_ASSOC);
+    return $stmt->get_result()->fetch_all(MYSQLI_ASSOC);
 }
 
 function logAction(mysqli $conn, ?int $userId, ?string $username, string $action, ?string $detail = null) {
-    // Verify user_id exists before inserting, to avoid foreign key constraint errors
     if ($userId !== null) {
-        $checkStmt = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-        $checkStmt->bind_param('i', $userId);
-        $checkStmt->execute();
-        $checkResult = $checkStmt->get_result();
-        if ($checkResult->fetch_assoc() === null) {
-            // User doesn't exist, set user_id to NULL to avoid constraint violation
-            $userId = null;
-        }
-        $checkStmt->close();
+        $check = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $check->bind_param('i', $userId);
+        $check->execute();
+        if ($check->get_result()->fetch_assoc() === null) $userId = null;
+        $check->close();
     }
-    
-    $stmt = $conn->prepare("user_logs (user_id, username, action, detail) VALUES (?, ?, ?, ?)");
+    $stmt = $conn->prepare("INSERT INTO user_logs (user_id, username, action, detail) VALUES (?, ?, ?, ?)");
     $stmt->bind_param('isss', $userId, $username, $action, $detail);
     $stmt->execute();
     $stmt->close();
@@ -327,264 +313,181 @@ function logTransaction(mysqli $conn, ?int $userId, ?string $username, string $e
     $transactionType = $transactionType ?? 'user_action';
     $oldVal = $oldValue ? json_encode($oldValue) : null;
     $newVal = $newValue ? json_encode($newValue) : null;
-    
-    // Verify user_id and related_order_id exist before inserting
+
     if ($userId !== null) {
-        $checkStmt = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-        $checkStmt->bind_param('i', $userId);
-        $checkStmt->execute();
-        if ($checkStmt->get_result()->fetch_assoc() === null) {
-            $userId = null;
-        }
-        $checkStmt->close();
+        $check = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $check->bind_param('i', $userId);
+        $check->execute();
+        if ($check->get_result()->fetch_assoc() === null) $userId = null;
+        $check->close();
     }
-    
     if ($relatedOrderId !== null) {
-        $checkStmt = $conn->prepare("SELECT id FROM orders WHERE id = ? LIMIT 1");
-        $checkStmt->bind_param('i', $relatedOrderId);
-        $checkStmt->execute();
-        if ($checkStmt->get_result()->fetch_assoc() === null) {
-            $relatedOrderId = null;
-        }
-        $checkStmt->close();
+        $check = $conn->prepare("SELECT id FROM orders WHERE id = ? LIMIT 1");
+        $check->bind_param('i', $relatedOrderId);
+        $check->execute();
+        if ($check->get_result()->fetch_assoc() === null) $relatedOrderId = null;
+        $check->close();
     }
-    
+
+    // FIX: was missing INSERT INTO
     $stmt = $conn->prepare(
-        "transaction_logs (transaction_type, user_id, username, entity_type, entity_id, entity_name, action, description, old_value, new_value, status, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO transaction_logs (transaction_type, user_id, username, entity_type, entity_id, entity_name, action, description, old_value, new_value, status, related_order_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param(
-        'sississssssi',
-        $transactionType,
-        $userId,
-        $username,
-        $entityType,
-        $entityId,
-        $entityName,
-        $action,
-        $description,
-        $oldVal,
-        $newVal,
-        $status,
-        $relatedOrderId
-    );
+    $stmt->bind_param('sississssssi', $transactionType, $userId, $username, $entityType, $entityId, $entityName, $action, $description, $oldVal, $newVal, $status, $relatedOrderId);
     $stmt->execute();
     $stmt->close();
 }
 
-function logInventoryMovement(mysqli $conn, string $type, ?int $ingredientId, ?int $menuItemId, float $quantityChange, float $oldQuantity, float $newQuantity, ?string $reason, ?int $referencelId, ?string $referenceType, ?int $userId, ?string $username) {
-    // Verify user_id exists before inserting
+function logInventoryMovement(mysqli $conn, string $type, ?int $ingredientId, ?int $menuItemId, float $quantityChange, float $oldQuantity, float $newQuantity, ?string $reason, ?int $referenceId, ?string $referenceType, ?int $userId, ?string $username) {
     if ($userId !== null) {
-        $checkStmt = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
-        $checkStmt->bind_param('i', $userId);
-        $checkStmt->execute();
-        if ($checkStmt->get_result()->fetch_assoc() === null) {
-            $userId = null;
-        }
-        $checkStmt->close();
+        $check = $conn->prepare("SELECT id FROM users WHERE id = ? LIMIT 1");
+        $check->bind_param('i', $userId);
+        $check->execute();
+        if ($check->get_result()->fetch_assoc() === null) $userId = null;
+        $check->close();
     }
-    
+    // FIX: was missing INSERT INTO
     $stmt = $conn->prepare(
-        "inventory_movements (type, ingredient_id, menu_item_id, quantity_change, old_quantity, new_quantity, reason, reference_id, reference_type, recorded_by, recorded_by_username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO inventory_movements (type, ingredient_id, menu_item_id, quantity_change, old_quantity, new_quantity, reason, reference_id, reference_type, recorded_by, recorded_by_username) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param(
-        'siidddsissi',
-        $type,
-        $ingredientId,
-        $menuItemId,
-        $quantityChange,
-        $oldQuantity,
-        $newQuantity,
-        $reason,
-        $referencelId,
-        $referenceType,
-        $userId,
-        $username
-    );
+    $stmt->bind_param('siidddsissi', $type, $ingredientId, $menuItemId, $quantityChange, $oldQuantity, $newQuantity, $reason, $referenceId, $referenceType, $userId, $username);
     $success = $stmt->execute();
     $stmt->close();
     return $success;
 }
 
 function saveOrder(mysqli $conn, ?int $userId, ?string $username, array $orderData): int {
-    $tableName = trim($orderData['table'] ?? 'Takeout');
-    $customerName = trim($orderData['customer_name'] ?? '');
-    $paymentMethod = in_array($orderData['payment_method'] ?? 'cash', ['cash', 'e_wallet', 'card', 'check', 'online', 'other'], true) ? $orderData['payment_method'] : 'cash';
+    $tableName        = trim($orderData['table'] ?? 'Takeout');
+    $customerName     = trim($orderData['customer_name'] ?? '');
+    $paymentMethod    = in_array($orderData['payment_method'] ?? 'cash', ['cash','e_wallet','card','check','online','other'], true) ? $orderData['payment_method'] : 'cash';
     $paymentReference = trim($orderData['payment_reference'] ?? '');
     $paymentDetailsRaw = trim($orderData['payment_details'] ?? '');
-    $paymentDetails = $paymentDetailsRaw !== '' ? json_encode(['details' => $paymentDetailsRaw]) : null;
-    $subtotal = max(0.0, floatval($orderData['subtotal'] ?? 0));
-    $discountType = strtolower(trim($orderData['customer_type'] ?? 'regular'));
-    if (!in_array($discountType, ['regular', 'pwd', 'senior'], true)) {
-        $discountType = 'regular';
-    }
-    $discountPercent = floatval($orderData['discount_percent'] ?? 0);
-    $legalDiscountPercent = in_array($discountType, ['pwd', 'senior'], true) ? 20.0 : 0.0;
-    $discountPercent = $legalDiscountPercent;
-    $discountLabel = trim($orderData['discount_label'] ?? '');
+    $paymentDetails   = $paymentDetailsRaw !== '' ? json_encode(['details' => $paymentDetailsRaw]) : null;
+    $subtotal         = max(0.0, floatval($orderData['subtotal'] ?? 0));
+    $discountType     = strtolower(trim($orderData['customer_type'] ?? 'regular'));
+    if (!in_array($discountType, ['regular','pwd','senior'], true)) $discountType = 'regular';
+    $discountPercent  = in_array($discountType, ['pwd','senior'], true) ? 20.0 : 0.0;
+    $discountLabel    = trim($orderData['discount_label'] ?? '');
     if ($discountLabel === '') {
-        $discountLabel = $discountType === 'pwd'
-            ? 'PWD Discount (20%)'
-            : ($discountType === 'senior' ? 'Senior Citizen Discount (20%)' : 'Regular Discount');
+        $discountLabel = $discountType === 'pwd' ? 'PWD Discount (20%)' : ($discountType === 'senior' ? 'Senior Citizen Discount (20%)' : 'Regular Discount');
     }
-    $discount = round($subtotal * ($discountPercent / 100), 2);
-    $total = max(0.0, round($subtotal - $discount, 2));
-    $cashReceived = max(0.0, floatval($orderData['cash'] ?? $orderData['cash_received'] ?? 0));
-    $changeAmount = $paymentMethod === 'cash' ? round($cashReceived - $total, 2) : 0.0;
-    $orderNumber = 'ORD-' . date('Ymd') . '-' . uniqid();
-    $now = date('Y-m-d H:i:s');
+    $discount      = round($subtotal * ($discountPercent / 100), 2);
+    $total         = max(0.0, round($subtotal - $discount, 2));
+    $cashReceived  = max(0.0, floatval($orderData['cash'] ?? $orderData['cash_received'] ?? 0));
+    $changeAmount  = $paymentMethod === 'cash' ? round($cashReceived - $total, 2) : 0.0;
+    $orderNumber   = 'ORD-' . date('Ymd') . '-' . uniqid();
+    $now           = date('Y-m-d H:i:s');
 
+    // FIX: was missing INSERT INTO
     $stmt = $conn->prepare(
-        'orders (order_number, user_id, username, customer_name, table_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        "INSERT INTO orders (order_number, user_id, username, customer_name, table_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param(
-        'sisssdddssssssdds',
-        $orderNumber,
-        $userId,
-        $username,
-        $customerName,
-        $tableName,
-        $subtotal,
-        $discount,
-        $discountPercent,
-        $discountType,
-        $discountLabel,
-        $total,
-        $paymentMethod,
-        $paymentReference,
-        $paymentDetails,
-        $cashReceived,
-        $changeAmount,
-        $now
-    );
+    $stmt->bind_param('sisssdddssssssdds', $orderNumber, $userId, $username, $customerName, $tableName, $subtotal, $discount, $discountPercent, $discountType, $discountLabel, $total, $paymentMethod, $paymentReference, $paymentDetails, $cashReceived, $changeAmount, $now);
     $stmt->execute();
     $orderId = $conn->insert_id;
     $stmt->close();
 
+    // FIX: was missing INSERT INTO
     $itemStmt = $conn->prepare(
-        'order_items (order_id, menu_item_id, item_name, emoji, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?, ?, ?)'
+        "INSERT INTO order_items (order_id, menu_item_id, item_name, emoji, quantity, unit_price, item_total) VALUES (?, ?, ?, ?, ?, ?, ?)"
     );
     foreach ($orderData['items'] as $item) {
         $itemId = null;
         if (isset($item['id']) && is_numeric($item['id'])) {
             $candidateId = intval($item['id']);
-            $checkStmt = $conn->prepare('SELECT id FROM menu_items WHERE id = ? LIMIT 1');
-            $checkStmt->bind_param('i', $candidateId);
-            $checkStmt->execute();
-            if ($checkStmt->get_result()->fetch_assoc() !== null) {
-                $itemId = $candidateId;
-            }
-            $checkStmt->close();
+            $check = $conn->prepare("SELECT id FROM menu_items WHERE id = ? LIMIT 1");
+            $check->bind_param('i', $candidateId);
+            $check->execute();
+            if ($check->get_result()->fetch_assoc() !== null) $itemId = $candidateId;
+            $check->close();
         }
-        $itemName = trim($item['name'] ?? 'Unknown');
-        $itemEmoji = trim($item['emoji'] ?? '');
-        $quantity = max(1, intval($item['qty'] ?? $item['quantity'] ?? 1));
-        $unitPrice = floatval($item['price'] ?? $item['unit_price'] ?? 0);
+        $itemName   = trim($item['name'] ?? 'Unknown');
+        $itemEmoji  = trim($item['emoji'] ?? '');
+        $quantity   = max(1, intval($item['qty'] ?? $item['quantity'] ?? 1));
+        $unitPrice  = floatval($item['price'] ?? $item['unit_price'] ?? 0);
         $totalPrice = floatval($item['total'] ?? ($unitPrice * $quantity));
         $itemStmt->bind_param('iissidd', $orderId, $itemId, $itemName, $itemEmoji, $quantity, $unitPrice, $totalPrice);
         $itemStmt->execute();
     }
     $itemStmt->close();
 
-    // Log the transaction in the comprehensive audit trail
-    $orderData_json = array(
-        'order_number' => $orderNumber,
-        'table' => $tableName,
-        'customer' => $customerName,
-        'subtotal' => $subtotal,
-        'discount' => $discount,
+    logTransaction($conn, $userId, $username, 'order', $orderId, $orderNumber, 'create', 'Order created and completed', null, [
+        'order_number'     => $orderNumber,
+        'table'            => $tableName,
+        'customer'         => $customerName,
+        'subtotal'         => $subtotal,
+        'discount'         => $discount,
         'discount_percent' => $discountPercent,
-        'discount_type' => $discountType,
-        'discount_label' => $discountLabel,
-        'total' => $total,
-        'items_count' => count($orderData['items'] ?? []),
-        'payment_method' => $paymentMethod
-    );
-    logTransaction($conn, $userId, $username, 'order', $orderId, $orderNumber, 'create', 'Order created and completed', null, $orderData_json, 'success', 'order', $orderId);
+        'discount_type'    => $discountType,
+        'discount_label'   => $discountLabel,
+        'total'            => $total,
+        'items_count'      => count($orderData['items'] ?? []),
+        'payment_method'   => $paymentMethod,
+    ], 'success', 'order', $orderId);
 
     return $orderId;
 }
 
 function saveIngredient(mysqli $conn, ?int $userId, ?string $username, array $ingredientData): int {
-    $name = trim($ingredientData['name'] ?? '');
-    $unit = trim($ingredientData['unit'] ?? 'kg');
-    $stock = max(0.0, floatval($ingredientData['stock'] ?? 0));
-    $minStock = max(0.0, floatval($ingredientData['min_stock'] ?? 5));
+    $name      = trim($ingredientData['name'] ?? '');
+    $unit      = trim($ingredientData['unit'] ?? 'kg');
+    $stock     = max(0.0, floatval($ingredientData['stock'] ?? 0));
+    $minStock  = max(0.0, floatval($ingredientData['min_stock'] ?? 5));
     $unitPrice = max(0.0, floatval($ingredientData['unit_price'] ?? 0));
-    $status = in_array($ingredientData['status'] ?? 'available', ['available', 'unavailable'], true) ? $ingredientData['status'] : 'available';
+    $status    = in_array($ingredientData['status'] ?? 'available', ['available','unavailable'], true) ? $ingredientData['status'] : 'available';
 
-    if (empty($name)) {
-        throw new Exception('Ingredient name is required');
-    }
+    if (empty($name)) throw new Exception('Ingredient name is required');
 
     try {
-        $stmt = $conn->prepare(
-            'ingredients (name, unit, stock, min_stock, unit_price, status) VALUES (?, ?, ?, ?, ?, ?)'
-        );
+        // FIX: was missing INSERT INTO
+        $stmt = $conn->prepare("INSERT INTO ingredients (name, unit, stock, min_stock, unit_price, status) VALUES (?, ?, ?, ?, ?, ?)");
         $stmt->bind_param('ssddds', $name, $unit, $stock, $minStock, $unitPrice, $status);
         $stmt->execute();
         $ingredientId = $conn->insert_id;
         $stmt->close();
 
-        // Log inventory movement for initial stock
         if ($stock > 0) {
-            logInventoryMovement($conn, 'in', $ingredientId, null, $stock, 0, $stock, 'Initial stock', null, 'ingredient_created', $userId, $username);
+            logInventoryMovement($conn, 'in', $ingredientId, null, $stock, 0, $stock, 'Initial stock', null, 'restock', $userId, $username);
         }
-
-        // Log the transaction
-        logTransaction($conn, $userId, $username, 'ingredient', $ingredientId, $name, 'create', 'Ingredient created', null, array('name' => $name, 'unit' => $unit, 'stock' => $stock), 'success');
+        logTransaction($conn, $userId, $username, 'ingredient', $ingredientId, $name, 'create', 'Ingredient created', null, ['name' => $name, 'unit' => $unit, 'stock' => $stock], 'success');
 
         return $ingredientId;
     } catch (mysqli_sql_exception $ex) {
-        if ($ex->getCode() === 1062) { // Duplicate entry
-            throw new Exception('Ingredient name already exists');
-        }
+        if ($ex->getCode() === 1062) throw new Exception('Ingredient name already exists');
         throw $ex;
     }
 }
 
 function getIngredients(mysqli $conn): array {
-    $result = $conn->query('SELECT * FROM ingredients ORDER BY name ASC');
-    $ingredients = [];
-    while ($row = $result->fetch_assoc()) {
-        $ingredients[] = $row;
-    }
-    return $ingredients;
+    $result = $conn->query("SELECT * FROM ingredients ORDER BY name ASC");
+    $rows = [];
+    while ($row = $result->fetch_assoc()) $rows[] = $row;
+    return $rows;
 }
 
 function updateIngredientStock(mysqli $conn, int $ingredientId, float $newStock, ?int $userId, ?string $username, ?string $reason = null): bool {
-    // Get current stock
-    $stmt = $conn->prepare('SELECT stock FROM ingredients WHERE id = ?');
+    $stmt = $conn->prepare("SELECT stock FROM ingredients WHERE id = ?");
     $stmt->bind_param('i', $ingredientId);
     $stmt->execute();
-    $result = $stmt->get_result();
-    $row = $result->fetch_assoc();
+    $row = $stmt->get_result()->fetch_assoc();
     $stmt->close();
+    if (!$row) throw new Exception('Ingredient not found');
 
-    if (!$row) {
-        throw new Exception('Ingredient not found');
-    }
-
-    $oldStock = floatval($row['stock']);
+    $oldStock       = floatval($row['stock']);
     $quantityChange = $newStock - $oldStock;
 
-    // Update stock
-    $stmt = $conn->prepare('UPDATE ingredients SET stock = ? WHERE id = ?');
+    $stmt = $conn->prepare("UPDATE ingredients SET stock = ? WHERE id = ?");
     $stmt->bind_param('di', $newStock, $ingredientId);
     $stmt->execute();
     $stmt->close();
 
-    // Log inventory movement
-    $type = $quantityChange > 0 ? 'in' : 'out';
-    logInventoryMovement($conn, $type, $ingredientId, null, abs($quantityChange), $oldStock, $newStock, $reason ?: 'Stock adjustment', null, 'stock_adjustment', $userId, $username);
-
+    logInventoryMovement($conn, $quantityChange > 0 ? 'in' : 'out', $ingredientId, null, abs($quantityChange), $oldStock, $newStock, $reason ?: 'Stock adjustment', null, 'adjustment', $userId, $username);
     return true;
 }
 
 function performDailyReconciliation(mysqli $conn, ?int $userId, ?string $username): int {
     $reconciliationDate = date('Y-m-d');
-    $stmt = $conn->prepare(
-        'SELECT payment_method, SUM(total) AS expected_amount FROM orders WHERE DATE(created_at) = ? GROUP BY payment_method'
-    );
+    $stmt = $conn->prepare("SELECT payment_method, SUM(total) AS expected_amount FROM orders WHERE DATE(created_at) = ? GROUP BY payment_method");
     $stmt->bind_param('s', $reconciliationDate);
     $stmt->execute();
     $result = $stmt->get_result();
@@ -595,45 +498,41 @@ function performDailyReconciliation(mysqli $conn, ?int $userId, ?string $usernam
         $expectedAmounts[$row['payment_method']] = floatval($row['expected_amount']);
     }
 
-    $paymentMethods = ['cash', 'e_wallet', 'card', 'check', 'online', 'other'];
+    // FIX: was missing INSERT INTO
     $upsert = $conn->prepare(
-        'payment_reconciliation (reconciliation_date, payment_method, expected_amount, actual_amount, variance, variance_percent, status, reconciled_by, notes, reconciled_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW()) ON DUPLICATE KEY UPDATE expected_amount = VALUES(expected_amount), actual_amount = VALUES(actual_amount), variance = VALUES(variance), variance_percent = VALUES(variance_percent), status = VALUES(status), reconciled_by = VALUES(reconciled_by), notes = VALUES(notes), reconciled_at = NOW()'
+        "INSERT INTO payment_reconciliation (reconciliation_date, payment_method, expected_amount, actual_amount, variance, variance_percent, status, reconciled_by, notes, reconciled_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+         ON DUPLICATE KEY UPDATE expected_amount = VALUES(expected_amount), actual_amount = VALUES(actual_amount), variance = VALUES(variance), variance_percent = VALUES(variance_percent), status = VALUES(status), reconciled_by = VALUES(reconciled_by), notes = VALUES(notes), reconciled_at = NOW()"
     );
 
+    $paymentMethods = ['cash','e_wallet','card','check','online','other'];
     $rowsCreated = 0;
     foreach ($paymentMethods as $method) {
-        $expected = $expectedAmounts[$method] ?? 0.0;
-        $actual = $expected;
-        $variance = 0.0;
+        $expected        = $expectedAmounts[$method] ?? 0.0;
+        $actual          = $expected;
+        $variance        = 0.0;
         $variancePercent = 0.0;
-        $status = 'success';
-        $notes = 'Auto reconciliation generated at 22:00';
+        $status          = 'balanced';
+        $notes           = 'Auto reconciliation generated at ' . date('H:i');
         $upsert->bind_param('ssdddssis', $reconciliationDate, $method, $expected, $actual, $variance, $variancePercent, $status, $userId, $notes);
         $upsert->execute();
-        $rowsCreated += 1;
+        $rowsCreated++;
     }
     $upsert->close();
-
     return $rowsCreated;
 }
 
-// ============ UTILITY FUNCTIONS ============
+// ============ UTILITY ============
 function sanitize(string $value): string {
     return htmlspecialchars(trim($value), ENT_QUOTES, 'UTF-8');
 }
 
 function isSafeRedirect(string $url): bool {
     $parsed = parse_url($url);
-    if ($parsed === false) {
-        return false;
-    }
-    if (isset($parsed['scheme']) || isset($parsed['host'])) {
-        return false;
-    }
-    if (!isset($parsed['path']) || strpos($parsed['path'], '..') !== false) {
-        return false;
-    }
-    return preg_match('#^[a-zA-Z0-9_\/\.\-]+$#', $parsed['path']);
+    if ($parsed === false) return false;
+    if (isset($parsed['scheme']) || isset($parsed['host'])) return false;
+    if (!isset($parsed['path']) || strpos($parsed['path'], '..') !== false) return false;
+    return (bool)preg_match('#^[a-zA-Z0-9_\/\.\-]+$#', $parsed['path']);
 }
 
 // ============ SHARED CSS ============
