@@ -295,8 +295,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
                   <td><?= htmlspecialchars(ucfirst($u['status'])) ?></td>
                   <td><?= htmlspecialchars($u['created_at']) ?></td>
                   <td>
-                    <!-- FIX: Archive form now uses correct PHP variable $u['id'] in PHP context,
-                         not inside a JS string where it would render blank -->
+                    
                     <form method="POST" style="display:inline;" onsubmit="return confirm('Archive this user?')">
                       <input type="hidden" name="action" value="archive_record">
                       <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
@@ -311,7 +310,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         </div>
       </div>
     </div>
-
+                
     <!-- ORDER HISTORY PAGE -->
     <div id="page-orders" class="page" style="flex-direction:column;">
       <div class="section-header">
@@ -326,8 +325,8 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       </div>
     </div>
 
-  </div><!-- /.main -->
-</div><!-- /.app -->
+  </div>
+</div>
 
 <!-- MODALS -->
 <div class="modal-overlay" id="itemModal">

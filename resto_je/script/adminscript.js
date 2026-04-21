@@ -1,4 +1,8 @@
-
+// ─────────────────────────────────────────────────────────────────
+// STATE
+// FIX: menuItems now comes from DB, not localStorage.
+// localStorage is only kept for transactions (pos_tx) as a
+// local session cache — orders are also saved to DB via api.php.
 // ─────────────────────────────────────────────────────────────────
 let menuItems = [];
 let ingredients = [];
@@ -6,7 +10,7 @@ let cart = [];
 let transactions = JSON.parse(localStorage.getItem('pos_tx') || '[]');
 let editingItemId = null;
 let activeCategory = 'all';
-let inventoryMode = 'ingredients'; 
+let inventoryMode = 'items';
 let nextId = 1;
 
 // ─────────────────────────────────────────────────────────────────
@@ -26,11 +30,18 @@ function apiPost(payload) {
   });
 }
 
+// FIX: Load menu from DB instead of localStorage
 function loadMenuFromDB() {
   return apiPost({ action: 'get_menu_items' })
     .then(result => {
       if (result.success) {
-        menuItems = result.items;
+        // FIX: Normalize numeric fields so id comparisons with === always work
+        menuItems = result.items.map(i => ({
+          ...i,
+          id:    parseInt(i.id)      || 0,
+          price: parseFloat(i.price) || 0,
+          stock: parseInt(i.stock)   || 0
+        }));
         nextId = Math.max(...menuItems.map(i => i.id), 0) + 1;
       } else {
         toast('Failed to load menu: ' + (result.message || 'Unknown error'), 'error');
@@ -43,7 +54,12 @@ function loadIngredients() {
   return apiPost({ action: 'get_ingredients' })
     .then(result => {
       if (result.success) {
-        ingredients = result.ingredients;
+        // FIX: Normalize all numeric fields to JS numbers so === comparisons work reliably
+        ingredients = result.ingredients.map(i => ({
+          ...i,
+          id:    parseInt(i.id)    || 0,
+          stock: parseFloat(i.stock) || 0
+        }));
         return ingredients;
       } else {
         throw new Error(result.message || 'Failed to load ingredients');
@@ -51,8 +67,10 @@ function loadIngredients() {
     });
 }
 
-function saveMenu() {  }
-function saveIngredients() { }
+// FIX: Removed saveMenu() to localStorage — no longer used for persistence.
+// Kept as no-op so any stray calls don't crash.
+function saveMenu() { /* DB is the source of truth now */ }
+function saveIngredients() { /* DB is the source of truth now */ }
 function saveTx() { localStorage.setItem('pos_tx', JSON.stringify(transactions)); }
 
 // ─────────────────────────────────────────────────────────────────
@@ -66,15 +84,18 @@ function showPage(page) {
   if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
   if (page === 'menu') {
- 
+    // FIX: Always reload from DB when navigating to menu
     loadMenuFromDB().then(() => renderMenuTable());
   }
   if (page === 'inventory') {
-    loadMenuFromDB().then(() => {
-      loadIngredients()
-        .then(() => renderInventory())
-        .catch(err => { toast('Failed to load ingredients: ' + err.message, 'error'); renderInventory(); });
-    });
+    // FIX: Reset to items mode on each navigation so restock modal defaults correctly
+    inventoryMode = 'items';
+    document.getElementById('inventoryModeItems')?.classList.add('active');
+    document.getElementById('inventoryModeIngredients')?.classList.remove('active');
+    // Load both menu items and ingredients up front so restock modal is always ready
+    Promise.all([loadMenuFromDB(), loadIngredients().catch(() => [])])
+      .then(() => renderInventory())
+      .catch(() => renderInventory());
   }
   if (page === 'reports') renderReports();
   if (page === 'orders') renderOrderHistory();
@@ -165,7 +186,7 @@ function renderMenuTable() {
       </span></td>
       <td style="display:flex;gap:6px;">
         <button class="btn btn-ghost btn-sm" onclick="openEditModal(${item.id})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Archive</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Delete</button>
       </td>
     </tr>`).join('');
 }
@@ -203,7 +224,7 @@ function openEditModal(id) {
   openModal('itemModal');
 }
 
-
+// FIX: saveItem() now calls api.php instead of localStorage
 function saveItem() {
   const name  = document.getElementById('fName').value.trim();
   const price = parseFloat(document.getElementById('fPrice').value);
@@ -236,16 +257,16 @@ function saveItem() {
     .catch(err => toast('Network error: ' + err.message, 'error'));
 }
 
-
+// FIX: deleteItem() now calls api.php (soft delete/archive)
 function deleteItem(id) {
-  if (!confirm('Archive this menu item? It will be archived.')) return;
+  if (!confirm('Delete this menu item? It will be archived.')) return;
   apiPost({ action: 'delete_menu_item', item_id: id })
     .then(result => {
       if (result.success) {
-        toast('Item archived.', 'info');
+        toast('Item deleted.', 'info');
         loadMenuFromDB().then(() => { renderMenuTable(); renderMenuGrid(); });
       } else {
-        toast(result.message || 'Failed to archive item.', 'error');
+        toast(result.message || 'Failed to delete item.', 'error');
       }
     })
     .catch(err => toast('Network error: ' + err.message, 'error'));
@@ -489,34 +510,53 @@ function renderInventory() {
 }
 
 function setInventoryMode(mode) {
-inventoryMode = mode;
-//document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
-document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
-renderInventory();
+  inventoryMode = mode;
+  document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
+  document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
+
+  // FIX: Load the correct data source before rendering.
+  // Previously switching to 'ingredients' never fetched from DB,
+  // so the ingredients array was always empty — dropdown showed nothing.
+  if (mode === 'ingredients') {
+    loadIngredients()
+      .then(() => renderInventory())
+      .catch(err => { toast('Failed to load ingredients: ' + err.message, 'error'); renderInventory(); });
+  } else {
+    loadMenuFromDB()
+      .then(() => renderInventory())
+      .catch(() => renderInventory());
+  }
 }
 
 function openRestockModal() {
-  populateRestockSelect(null);
-  document.getElementById('restockQty').value = '';
-  openModal('restockModal');
+  // FIX: Always fetch fresh data before opening so the dropdown is never empty
+  const prepare = inventoryMode === 'ingredients' ? loadIngredients() : loadMenuFromDB();
+  prepare
+    .then(() => { populateRestockSelect(null); document.getElementById('restockQty').value = ''; openModal('restockModal'); })
+    .catch(() => { populateRestockSelect(null); document.getElementById('restockQty').value = ''; openModal('restockModal'); });
 }
 
 function quickRestock(id) {
-  populateRestockSelect(id);
-  document.getElementById('restockQty').value = '';
-  openModal('restockModal');
+  // FIX: Same — ensure data is loaded before populating the select
+  const prepare = inventoryMode === 'ingredients' ? loadIngredients() : loadMenuFromDB();
+  prepare
+    .then(() => { populateRestockSelect(id); document.getElementById('restockQty').value = ''; openModal('restockModal'); })
+    .catch(() => { populateRestockSelect(id); document.getElementById('restockQty').value = ''; openModal('restockModal'); });
 }
 
 function populateRestockSelect(selectedId) {
-  const source = inventoryMode === 'items' ? menuItems : ingredients;
+  const source  = inventoryMode === 'items' ? menuItems : ingredients;
   const titleEl = document.getElementById('restockModalTitle');
   if (titleEl) titleEl.textContent = inventoryMode === 'items' ? 'Restock Item' : 'Restock Ingredient';
   const sel = document.getElementById('restockItem');
-  if (sel) {
-    sel.innerHTML = source.map(i =>
-      `<option value="${i.id}" ${i.id === selectedId ? 'selected' : ''}>${inventoryMode === 'items' ? (i.emoji || '🍽') + ' ' + i.name : i.name} (Stock: ${i.stock})</option>`
-    ).join('');
+  if (!sel) return;
+  if (!source.length) {
+    sel.innerHTML = `<option value="">— No items found —</option>`;
+    return;
   }
+  sel.innerHTML = source.map(i =>
+    `<option value="${i.id}" ${parseInt(i.id) === parseInt(selectedId) ? 'selected' : ''}>${inventoryMode === 'items' ? (i.emoji || '🍽') + ' ' + i.name : i.name} (Stock: ${i.stock})</option>`
+  ).join('');
 }
 
 // FIX: doRestock() now calls api.php for menu items too, not just ingredients
@@ -530,8 +570,8 @@ function doRestock() {
     apiPost({ action: 'restock_menu_item', item_id: id, quantity: qty })
       .then(result => {
         if (result.success) {
-          const item = menuItems.find(i => i.id === id);
-          if (item) item.stock = result.new_stock;
+          const item = menuItems.find(i => parseInt(i.id) === parseInt(id));
+          if (item) item.stock = parseInt(result.new_stock) || item.stock;
           renderInventory();
           toast(`✅ ${item?.name || 'Item'} restocked +${qty}!`, 'success');
         } else {
@@ -540,21 +580,25 @@ function doRestock() {
       })
       .catch(err => toast('Network error: ' + err.message, 'error'));
   } else {
-    const item = ingredients.find(i => i.id === id);
-    if (item) {
-      const newStock = item.stock + qty;
-      apiPost({ action: 'update_ingredient_stock', ingredient_id: id, stock: newStock, reason: 'Restock' })
-        .then(result => {
-          if (result.success) {
-            item.stock = newStock;
-            renderInventory();
-            toast(`✅ ${item.name} restocked +${qty}!`, 'success');
-          } else {
-            toast(result.message || 'Failed to update stock.', 'error');
-          }
-        })
-        .catch(err => toast('Network error: ' + err.message, 'error'));
+    // FIX: parseInt on both sides so string/number mismatch never causes false miss
+    const item = ingredients.find(i => parseInt(i.id) === parseInt(id));
+    if (!item) {
+      toast('Could not find ingredient — reloading data.', 'info');
+      loadIngredients().then(() => renderInventory());
+      return;
     }
+    const newStock = item.stock + qty;
+    apiPost({ action: 'update_ingredient_stock', ingredient_id: id, stock: newStock, reason: 'Restock' })
+      .then(result => {
+        if (result.success) {
+          item.stock = newStock;
+          renderInventory();
+          toast(`✅ ${item.name} restocked +${qty}!`, 'success');
+        } else {
+          toast(result.message || 'Failed to update stock.', 'error');
+        }
+      })
+      .catch(err => toast('Network error: ' + err.message, 'error'));
   }
 }
 
@@ -713,8 +757,7 @@ function toast(msg, type = 'info') {
   container.appendChild(el);
   setTimeout(() => el.remove(), 3000);
 }
-console.log("Script is running with new changes!");
-alert("If you see this, the file updated!");
+
 // ─────────────────────────────────────────────────────────────────
 // INIT — load menu from DB on first load
 // ─────────────────────────────────────────────────────────────────
