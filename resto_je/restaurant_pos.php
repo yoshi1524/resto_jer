@@ -402,10 +402,10 @@ $user = $_SESSION['user'];
         <div class="stat-card red"><div class="stat-label">Total Discounts</div><div class="stat-value" style="color:var(--red)" id="rptDiscounts">₱0.00</div><div class="stat-sub">Savings given</div></div>
       </div>
       <div class="grid-2" style="flex:1; min-height:0;">
-        <div class="card" style="overflow:auto;">
+        <!--<div class="card" style="overflow:auto;">
           <div class="card-title">Sales by Hour</div>
           <div class="chart-bar-wrap" id="hourlyChart"></div>
-        </div>
+        </div>-->
         <div class="card" style="overflow:auto;">
           <div class="card-title">Top Selling Items</div>
           <div id="topItemsChart"></div>
@@ -458,7 +458,7 @@ $user = $_SESSION['user'];
         <select class="form-input" id="fCategory">
           <option>Sizzling Favorites</option>
           <option>Country Classics</option>
-          <option>Heart Lover's Delight</option>
+          <option>Heart Lovers Delight</option>
           <option>Sandwiches &amp; Snacks</option>
           <option>Desserts</option>
           <option>Cream Soups</option>
@@ -550,8 +550,8 @@ $user = $_SESSION['user'];
 let menuItems = JSON.parse(localStorage.getItem('pos_menu') || 'null') || [
   { id:1, emoji:'🍗', name:'Fried Chicken', category:'Country Classics', price:185, stock:20, status:'available' },
   { id:2, emoji:'🍝', name:'Spaghetti', category:'Sizzling Favorites', price:150, stock:15, status:'available' },
-  { id:3, emoji:'🍣', name:'Salmon Sashimi', category:'Heart Lover\'s Delight', price:320, stock:8, status:'available' },
-  { id:4, emoji:'🥗', name:'Caesar Salad', category:'Heart Lover\'s Delight', price:120, stock:12, status:'available' },
+  { id:3, emoji:'🍣', name:'Salmon Sashimi', category:'Heart Lovers Delight', price:320, stock:8, status:'available' },
+  { id:4, emoji:'🥗', name:'Caesar Salad', category:'Heart Lovers Delight', price:120, stock:12, status:'available' },
   { id:5, emoji:'🍲', name:'Sinigang na Baboy', category:'Country Classics', price:175, stock:10, status:'available' },
   { id:6, emoji:'🍛', name:'Beef Caldereta', category:'Sizzling Favorites', price:210, stock:6, status:'available' },
   { id:7, emoji:'🧁', name:'Chocolate Lava Cake', category:'Desserts', price:135, stock:14, status:'available' },

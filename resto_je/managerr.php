@@ -197,10 +197,10 @@ $users = getUsers($conn);
       </div>
       <div class="grid-2" style="flex:1;min-height:0;">
         <div style="display:flex;flex-direction:column;gap:16px;">
-          <div class="card" style="overflow:auto;">
+          <!--<div class="card" style="overflow:auto;">
             <div class="card-title">Sales by Hour</div>
             <div class="chart-bar-wrap" id="hourlyChart"></div>
-          </div>
+          </div>-->
           <div class="card" style="flex:1;overflow:auto;">
             <div class="card-title">Daily Sales Summary</div>
             <table class="user-table">
@@ -246,7 +246,7 @@ $users = getUsers($conn);
         <select class="form-input" id="fCategory">
           <option>Sizzling Favorites</option>
           <option>Country Classics</option>
-          <option>Heart Lover's Delight</option>
+          <option>Heart Lovers Delight</option>
           <option>Sandwiches &amp; Snacks</option>
           <option>Desserts</option>
           <option>Cream Soups</option>

@@ -21,7 +21,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         $error = 'Please select a valid role.';
     } else {
         try {
-            if (createUser($conn, $username, $password, $role)) {
+            if (createUser($conn, $username, $password, $role, $branch_id)) {
                 $message = "User '{$username}' created successfully.";
                 logAction($conn, $user['id'], $user['username'], 'create_user', "Created POS user {$username} with role {$role}");
             } else {
@@ -143,34 +143,52 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
 
     <!-- REPORTS PAGE -->
     <div id="page-reports" class="page" style="flex-direction:column;gap:16px;">
-      <div class="section-header" style="margin-bottom:0;">
-        <div class="section-title">Sales Reports &amp; Analytics</div>
-        <button class="btn btn-ghost btn-sm" onclick="clearSalesData()">Reset Data</button>
+      <div class="section-header" style="margin-bottom:0;flex-wrap:wrap;gap:10px;">
+        <div class="section-title">Sales Reports — All Branches</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <label style="font-size:12px;color:var(--text3);">From</label>
+          <input type="date" id="rptDateFrom" class="form-input" style="padding:6px 10px;font-size:13px;width:150px;" onchange="loadBranchSales()"/>
+          <label style="font-size:12px;color:var(--text3);">To</label>
+          <input type="date" id="rptDateTo"   class="form-input" style="padding:6px 10px;font-size:13px;width:150px;" onchange="loadBranchSales()"/>
+          <button class="btn btn-accent btn-sm" onclick="loadBranchSales()">Refresh</button>
+        </div>
       </div>
+
+      <!-- All-branch totals -->
       <div class="grid-4">
-        <div class="stat-card accent"><div class="stat-label">Today's Revenue</div><div class="stat-value accent" id="rptRevenue">₱0.00</div><div class="stat-sub" id="rptTxCount">0 transactions</div></div>
-        <div class="stat-card green"><div class="stat-label">Orders Today</div><div class="stat-value green" id="rptOrders">0</div><div class="stat-sub">Completed orders</div></div>
+        <div class="stat-card accent"><div class="stat-label">Total Revenue</div><div class="stat-value accent" id="rptRevenue">₱0.00</div><div class="stat-sub" id="rptTxCount">0 orders</div></div>
+        <div class="stat-card green"><div class="stat-label">Total Orders</div><div class="stat-value green" id="rptOrders">0</div><div class="stat-sub">Across all branches</div></div>
         <div class="stat-card blue"><div class="stat-label">Avg Order Value</div><div class="stat-value blue" id="rptAvg">₱0.00</div><div class="stat-sub">Per transaction</div></div>
         <div class="stat-card red"><div class="stat-label">Total Discounts</div><div class="stat-value" style="color:var(--red)" id="rptDiscounts">₱0.00</div><div class="stat-sub">Savings given</div></div>
       </div>
+
+      <!-- Per-branch summary cards -->
+      <div id="branchCards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px;"></div>
+
       <div class="grid-2" style="flex:1;min-height:0;">
         <div style="display:flex;flex-direction:column;gap:16px;">
           <div class="card" style="overflow:auto;">
-            <div class="card-title">Sales by Hour</div>
-            <div class="chart-bar-wrap" id="hourlyChart"></div>
-          </div>
-          <div class="card" style="flex:1;overflow:auto;">
-            <div class="card-title">Daily Sales Summary</div>
+            <div class="card-title">Daily Sales — All Branches</div>
             <table class="user-table">
-              <thead><tr><th>Date</th><th>Revenue</th></tr></thead>
+              <thead><tr><th>Date</th><th>Branch</th><th>Orders</th><th>Revenue</th></tr></thead>
               <tbody id="dailySalesBody"></tbody>
             </table>
           </div>
         </div>
-        <div class="card" style="overflow:auto;">
-          <div class="card-title">Top Selling Items</div>
-          <div id="topItemsChart"></div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div class="card" style="overflow:auto;flex:1;">
+            <div class="card-title">Top Selling Items</div>
+            <div id="topItemsChart"></div>
+          </div>
         </div>
+      </div>
+
+      <div class="card" style="overflow:auto;max-height:280px;">
+        <div class="card-title">Recent Transactions — All Branches</div>
+        <table>
+          <thead><tr><th>Order #</th><th>Branch</th><th>Table</th><th>Staff</th><th>Total</th><th>Method</th><th>Time</th></tr></thead>
+          <tbody id="txTable"></tbody>
+        </table>
       </div>
     </div>
 
@@ -198,7 +216,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         <div>
           <div class="section-title">Inventory Tracking</div>
           <div style="display:flex;gap:8px;margin-top:10px;">
-           <!-- <button class="btn btn-ghost btn-sm active" id="inventoryModeItems" onclick="setInventoryMode('items')">Items</button>-->
+            <!--<button class="btn btn-ghost btn-sm active" id="inventoryModeItems" onclick="setInventoryMode('items')">Items</button>-->
             <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
           </div>
         </div>
@@ -295,7 +313,8 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
                   <td><?= htmlspecialchars(ucfirst($u['status'])) ?></td>
                   <td><?= htmlspecialchars($u['created_at']) ?></td>
                   <td>
-                    
+                    <!-- FIX: Archive form now uses correct PHP variable $u['id'] in PHP context,
+                         not inside a JS string where it would render blank -->
                     <form method="POST" style="display:inline;" onsubmit="return confirm('Archive this user?')">
                       <input type="hidden" name="action" value="archive_record">
                       <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
@@ -310,7 +329,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         </div>
       </div>
     </div>
-                
+
     <!-- ORDER HISTORY PAGE -->
     <div id="page-orders" class="page" style="flex-direction:column;">
       <div class="section-header">
@@ -325,8 +344,8 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       </div>
     </div>
 
-  </div>
-</div>
+  </div><!-- /.main -->
+</div><!-- /.app -->
 
 <!-- MODALS -->
 <div class="modal-overlay" id="itemModal">
@@ -348,7 +367,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         <select class="form-input" id="fCategory">
           <option>Sizzling Favorites</option>
           <option>Country Classics</option>
-          <option>Heart Lover's Delight</option>
+          <option>Heart Lovers Delight</option>
           <option>Sandwiches &amp; Snacks</option>
           <option>Desserts</option>
           <option>Cream Soups</option>
@@ -422,7 +441,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div style="font-size:12px;color:var(--text3);margin-top:8px;">Change</div>
       <div class="receipt-change" id="rcChange"></div>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!   </div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us! 🙏</div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('receiptModal')">Close</button>
       <button class="btn btn-accent" onclick="printReceipt()">🖨 Print</button>

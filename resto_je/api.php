@@ -13,7 +13,133 @@ $payload = json_decode($raw, true) ?: [];
 $action = $payload['action'] ?? $_POST['action'] ?? null;
 
 // ─────────────────────────────────────────────
-// GET MENU ITEMS (NEW — was missing entirely)
+// ─────────────────────────────────────────────────────────────────
+// GET BRANCH SALES SUMMARY — ALL BRANCHES (Admin)
+// ─────────────────────────────────────────────────────────────────
+if ($action === 'get_branch_sales') {
+    $dateFrom = trim($payload['date_from'] ?? date('Y-m-01'));
+    $dateTo   = trim($payload['date_to']   ?? date('Y-m-d'));
+    try {
+        $stmt = $conn->prepare("
+            SELECT COALESCE(b.id,0) AS branch_id,
+                   COALESCE(b.branch_name,'Unassigned') AS branch_name,
+                   COUNT(o.id) AS total_orders,
+                   COALESCE(SUM(o.total),0) AS total_revenue,
+                   COALESCE(SUM(o.discount_amount),0) AS total_discounts,
+                   COALESCE(AVG(o.total),0) AS avg_order_value,
+                   COALESCE(SUM(CASE WHEN o.payment_method='cash' THEN o.total ELSE 0 END),0) AS cash_sales,
+                   COALESCE(SUM(CASE WHEN o.payment_method='e_wallet' THEN o.total ELSE 0 END),0) AS ewallet_sales,
+                   COALESCE(SUM(CASE WHEN o.payment_method='online' THEN o.total ELSE 0 END),0) AS online_sales
+            FROM orders o LEFT JOIN branches b ON o.branch_id=b.id
+            WHERE DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            GROUP BY o.branch_id,b.branch_name ORDER BY total_revenue DESC");
+        $stmt->bind_param('ss',$dateFrom,$dateTo);
+        $stmt->execute();
+        $branches=$stmt->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt->close();
+
+        $stmt2=$conn->prepare("
+            SELECT COALESCE(o.branch_id,0) AS branch_id,
+                   COALESCE(b.branch_name,'Unassigned') AS branch_name,
+                   DATE(o.created_at) AS sale_date,
+                   COUNT(o.id) AS orders, COALESCE(SUM(o.total),0) AS revenue
+            FROM orders o LEFT JOIN branches b ON o.branch_id=b.id
+            WHERE DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            GROUP BY o.branch_id,b.branch_name,DATE(o.created_at)
+            ORDER BY sale_date DESC,revenue DESC");
+        $stmt2->bind_param('ss',$dateFrom,$dateTo);
+        $stmt2->execute();
+        $daily=$stmt2->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt2->close();
+
+        $stmt3=$conn->prepare("
+            SELECT COALESCE(o.branch_id,0) AS branch_id,
+                   oi.item_name,oi.emoji,
+                   SUM(oi.quantity) AS qty_sold, SUM(oi.item_total) AS revenue
+            FROM order_items oi JOIN orders o ON oi.order_id=o.id
+            WHERE DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            GROUP BY o.branch_id,oi.item_name,oi.emoji
+            ORDER BY o.branch_id,qty_sold DESC");
+        $stmt3->bind_param('ss',$dateFrom,$dateTo);
+        $stmt3->execute();
+        $topItems=$stmt3->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt3->close();
+
+        $stmt4=$conn->prepare("
+            SELECT o.id,o.order_number,o.table_name,o.username,
+                   COALESCE(b.branch_name,'Unassigned') AS branch_name,
+                   o.total,o.discount_amount,o.payment_method,o.customer_name,o.created_at
+            FROM orders o LEFT JOIN branches b ON o.branch_id=b.id
+            WHERE DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            ORDER BY o.created_at DESC LIMIT 30");
+        $stmt4->bind_param('ss',$dateFrom,$dateTo);
+        $stmt4->execute();
+        $recent=$stmt4->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt4->close();
+
+        echo json_encode(['success'=>true,'branches'=>$branches,'daily'=>$daily,'top_items'=>$topItems,'recent'=>$recent,'date_from'=>$dateFrom,'date_to'=>$dateTo]);
+    } catch(Exception $ex) { http_response_code(500); echo json_encode(['success'=>false,'message'=>$ex->getMessage()]); }
+    exit;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// GET BRANCH SALES — SINGLE BRANCH (Manager)
+// ─────────────────────────────────────────────────────────────────
+if ($action === 'get_my_branch_sales') {
+    $branchId = intval($payload['branch_id'] ?? 0);
+    $dateFrom = trim($payload['date_from'] ?? date('Y-m-01'));
+    $dateTo   = trim($payload['date_to']   ?? date('Y-m-d'));
+    if ($branchId <= 0) { http_response_code(400); echo json_encode(['success'=>false,'message'=>'Branch ID required.']); exit; }
+    try {
+        $stmt=$conn->prepare("
+            SELECT COUNT(o.id) AS total_orders,
+                   COALESCE(SUM(o.total),0) AS total_revenue,
+                   COALESCE(SUM(o.discount_amount),0) AS total_discounts,
+                   COALESCE(AVG(o.total),0) AS avg_order_value,
+                   COALESCE(SUM(CASE WHEN o.payment_method='cash' THEN o.total ELSE 0 END),0) AS cash_sales,
+                   COALESCE(SUM(CASE WHEN o.payment_method='e_wallet' THEN o.total ELSE 0 END),0) AS ewallet_sales,
+                   COALESCE(SUM(CASE WHEN o.payment_method='online' THEN o.total ELSE 0 END),0) AS online_sales
+            FROM orders o WHERE o.branch_id=? AND DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'");
+        $stmt->bind_param('iss',$branchId,$dateFrom,$dateTo);
+        $stmt->execute();
+        $summary=$stmt->get_result()->fetch_assoc();
+        $stmt->close();
+
+        $stmt2=$conn->prepare("
+            SELECT DATE(o.created_at) AS sale_date,COUNT(o.id) AS orders,SUM(o.total) AS revenue
+            FROM orders o WHERE o.branch_id=? AND DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            GROUP BY DATE(o.created_at) ORDER BY sale_date DESC");
+        $stmt2->bind_param('iss',$branchId,$dateFrom,$dateTo);
+        $stmt2->execute();
+        $daily=$stmt2->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt2->close();
+
+        $stmt3=$conn->prepare("
+            SELECT oi.item_name,oi.emoji,SUM(oi.quantity) AS qty_sold,SUM(oi.item_total) AS revenue
+            FROM order_items oi JOIN orders o ON oi.order_id=o.id
+            WHERE o.branch_id=? AND DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            GROUP BY oi.item_name,oi.emoji ORDER BY qty_sold DESC LIMIT 10");
+        $stmt3->bind_param('iss',$branchId,$dateFrom,$dateTo);
+        $stmt3->execute();
+        $topItems=$stmt3->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt3->close();
+
+        $stmt4=$conn->prepare("
+            SELECT o.id,o.order_number,o.table_name,o.username,
+                   o.total,o.discount_amount,o.payment_method,o.customer_name,o.created_at
+            FROM orders o WHERE o.branch_id=? AND DATE(o.created_at) BETWEEN ? AND ? AND o.status='completed'
+            ORDER BY o.created_at DESC LIMIT 20");
+        $stmt4->bind_param('iss',$branchId,$dateFrom,$dateTo);
+        $stmt4->execute();
+        $recent=$stmt4->get_result()->fetch_all(MYSQLI_ASSOC);
+        $stmt4->close();
+
+        echo json_encode(['success'=>true,'summary'=>$summary,'daily'=>$daily,'top_items'=>$topItems,'recent'=>$recent]);
+    } catch(Exception $ex) { http_response_code(500); echo json_encode(['success'=>false,'message'=>$ex->getMessage()]); }
+    exit;
+}
+
+// GET MENU ITEMS 
 // ─────────────────────────────────────────────
 if ($action === 'get_menu_items') {
     try {
@@ -35,7 +161,7 @@ if ($action === 'get_menu_items') {
 }
 
 // ─────────────────────────────────────────────
-// ADD MENU ITEM (NEW — was missing entirely)
+// ADD MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'add_menu_item') {
     $item = $payload['item'] ?? null;
@@ -75,7 +201,7 @@ if ($action === 'add_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// UPDATE MENU ITEM (NEW — was missing entirely)
+// UPDATE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'update_menu_item') {
     $item = $payload['item'] ?? null;
@@ -115,7 +241,7 @@ if ($action === 'update_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// DELETE MENU ITEM (NEW — was missing entirely)
+// DELETE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'delete_menu_item') {
     $itemId = intval($payload['item_id'] ?? 0);
@@ -126,7 +252,6 @@ if ($action === 'delete_menu_item') {
     }
 
     try {
-        // Soft-delete: archive instead of hard delete to preserve order history
         $stmt = $conn->prepare("UPDATE menu_items SET status = 'archived' WHERE id = ?");
         $stmt->bind_param("i", $itemId);
         $stmt->execute();
@@ -140,7 +265,7 @@ if ($action === 'delete_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// DEDUCT STOCK AFTER CHECKOUT (NEW — was missing)
+// DEDUCT STOCK AFTER CHECKOUT 
 // ─────────────────────────────────────────────
 if ($action === 'deduct_stock') {
     $items = $payload['items'] ?? [];
@@ -171,7 +296,7 @@ if ($action === 'deduct_stock') {
 }
 
 // ─────────────────────────────────────────────
-// RESTOCK MENU ITEM (NEW — was missing)
+// RESTOCK MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'restock_menu_item') {
     $itemId   = intval($payload['item_id'] ?? 0);
@@ -200,7 +325,7 @@ if ($action === 'restock_menu_item') {
 }
 
 // ─────────────────────────────────────────────
-// SAVE ORDER (unchanged, was working)
+// SAVE ORDER 
 // ─────────────────────────────────────────────
 if ($action === 'save_order') {
     $order = $payload['order'] ?? null;
@@ -225,7 +350,7 @@ if ($action === 'save_order') {
 }
 
 // ─────────────────────────────────────────────
-// SAVE INGREDIENT (unchanged, was working)
+// SAVE INGREDIENT 
 // ─────────────────────────────────────────────
 if ($action === 'save_ingredient') {
     $ingredient = $payload['ingredient'] ?? null;
@@ -247,7 +372,7 @@ if ($action === 'save_ingredient') {
 }
 
 // ─────────────────────────────────────────────
-// GET INGREDIENTS (unchanged, was working)
+// GET INGREDIENTS
 // ─────────────────────────────────────────────
 if ($action === 'get_ingredients') {
     try {
@@ -261,7 +386,7 @@ if ($action === 'get_ingredients') {
 }
 
 // ─────────────────────────────────────────────
-// UPDATE INGREDIENT STOCK (unchanged, was working)
+// UPDATE INGREDIENT STOCK 
 // ─────────────────────────────────────────────
 if ($action === 'update_ingredient_stock') {
     $ingredientId = intval($payload['ingredient_id'] ?? 0);
@@ -285,7 +410,7 @@ if ($action === 'update_ingredient_stock') {
 }
 
 // ─────────────────────────────────────────────
-// PERFORM RECONCILIATION (unchanged, was working)
+// PERFORM RECONCILIATION 
 // ─────────────────────────────────────────────
 if ($action === 'perform_reconciliation') {
     try {
@@ -299,7 +424,7 @@ if ($action === 'perform_reconciliation') {
 }
 
 // ─────────────────────────────────────────────
-// ARCHIVE MENU ITEM (was duplicating input read — now fixed)
+// ARCHIVE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'archive_menu_item') {
     $itemId = intval($payload['item_id'] ?? 0);

@@ -18,16 +18,32 @@ function dbConnect() {
 }
 
 function ensureSchema(mysqli $conn) {
+    // Branches table — must exist before users (foreign key)
+    $conn->query("CREATE TABLE IF NOT EXISTS branches (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        branch_name VARCHAR(100) NOT NULL UNIQUE,
+        address VARCHAR(255) NULL,
+        status ENUM('active','inactive') NOT NULL DEFAULT 'active',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        INDEX(branch_name), INDEX(status)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
     $conn->query("CREATE TABLE IF NOT EXISTS users (
         id INT AUTO_INCREMENT PRIMARY KEY,
         username VARCHAR(50) NOT NULL UNIQUE,
         password VARCHAR(255) NOT NULL,
         role ENUM('admin','manager','staff') NOT NULL DEFAULT 'staff',
+        branch_id INT NULL,
         status ENUM('active','archived') NOT NULL DEFAULT 'active',
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX(username), INDEX(role), INDEX(status), INDEX(created_at)
+        INDEX(username), INDEX(role), INDEX(status), INDEX(created_at), INDEX(branch_id),
+        CONSTRAINT fk_users_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+
+    // Add branch_id to users if upgrading existing DB
+    $conn->query("ALTER TABLE users ADD COLUMN IF NOT EXISTS branch_id INT NULL,
+        ADD INDEX IF NOT EXISTS idx_users_branch (branch_id)");
 
     $conn->query("CREATE TABLE IF NOT EXISTS menu_items (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -113,13 +129,16 @@ function ensureSchema(mysqli $conn) {
         payment_details JSON NULL,
         cash_received DECIMAL(10,2) NOT NULL DEFAULT 0,
         change_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
+        branch_id INT NULL,
+        branch_name VARCHAR(100) NULL,
         status ENUM('completed','pending','cancelled','refunded') NOT NULL DEFAULT 'completed',
         notes TEXT NULL,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
         completed_at DATETIME NULL,
         modified_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        INDEX(order_number), INDEX(user_id), INDEX(status), INDEX(payment_method), INDEX(created_at), INDEX(completed_at), INDEX(total),
-        CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+        INDEX(order_number), INDEX(user_id), INDEX(status), INDEX(payment_method), INDEX(created_at), INDEX(completed_at), INDEX(total), INDEX(branch_id),
+        CONSTRAINT fk_orders_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
+        CONSTRAINT fk_orders_branch FOREIGN KEY (branch_id) REFERENCES branches(id) ON DELETE SET NULL
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
     // Safe ALTER — adds missing columns to existing installs without breaking new ones
@@ -132,7 +151,9 @@ function ensureSchema(mysqli $conn) {
         ADD COLUMN IF NOT EXISTS payment_details JSON NULL,
         ADD COLUMN IF NOT EXISTS cash_received DECIMAL(10,2) NOT NULL DEFAULT 0,
         ADD COLUMN IF NOT EXISTS change_amount DECIMAL(10,2) NOT NULL DEFAULT 0,
-        ADD COLUMN IF NOT EXISTS completed_at DATETIME NULL");
+        ADD COLUMN IF NOT EXISTS completed_at DATETIME NULL,
+        ADD COLUMN IF NOT EXISTS branch_id INT NULL,
+        ADD COLUMN IF NOT EXISTS branch_name VARCHAR(100) NULL");
 
     $conn->query("CREATE TABLE IF NOT EXISTS order_items (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -274,15 +295,14 @@ function getUsers(mysqli $conn): array {
     return $result->fetch_all(MYSQLI_ASSOC);
 }
 
-function createUser(mysqli $conn, string $username, string $password, string $role): bool {
+function createUser(mysqli $conn, string $username, string $password, string $role, ?int $branchId = null): bool {
     $username = trim($username);
     if ($username === '' || $password === '') return false;
     if (!in_array($role, ['admin', 'manager', 'staff'], true)) $role = 'staff';
 
     $passwordHash = password_hash($password, PASSWORD_DEFAULT);
-    // FIX: was missing INSERT INTO
-    $stmt = $conn->prepare("INSERT INTO users (username, password, role, status) VALUES (?, ?, ?, 'active')");
-    $stmt->bind_param('sss', $username, $passwordHash, $role);
+    $stmt = $conn->prepare("INSERT INTO users (username, password, role, branch_id, status) VALUES (?, ?, ?, ?, 'active')");
+    $stmt->bind_param('sssi', $username, $passwordHash, $role, $branchId);
     $success = $stmt->execute();
     $stmt->close();
     return $success;
@@ -378,11 +398,25 @@ function saveOrder(mysqli $conn, ?int $userId, ?string $username, array $orderDa
     $orderNumber   = 'ORD-' . date('Ymd') . '-' . uniqid();
     $now           = date('Y-m-d H:i:s');
 
-    // FIX: was missing INSERT INTO
+    // Resolve branch from the user who placed the order
+    $branchId   = null;
+    $branchName = null;
+    if ($userId) {
+        $bStmt = $conn->prepare("SELECT b.id, b.branch_name FROM users u LEFT JOIN branches b ON u.branch_id = b.id WHERE u.id = ? LIMIT 1");
+        $bStmt->bind_param('i', $userId);
+        $bStmt->execute();
+        $bRow = $bStmt->get_result()->fetch_assoc();
+        $bStmt->close();
+        if ($bRow && !empty($bRow['id'])) {
+            $branchId   = (int)$bRow['id'];
+            $branchName = $bRow['branch_name'];
+        }
+    }
+
     $stmt = $conn->prepare(
-        "INSERT INTO orders (order_number, user_id, username, customer_name, table_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        "INSERT INTO orders (order_number, user_id, username, customer_name, table_name, branch_id, branch_name, subtotal, discount_amount, discount_percent, discount_type, discount_label, total, payment_method, payment_reference, payment_details, cash_received, change_amount, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
     );
-    $stmt->bind_param('sisssdddssssssdds', $orderNumber, $userId, $username, $customerName, $tableName, $subtotal, $discount, $discountPercent, $discountType, $discountLabel, $total, $paymentMethod, $paymentReference, $paymentDetails, $cashReceived, $changeAmount, $now);
+    $stmt->bind_param('sisssisdddssssssdds', $orderNumber, $userId, $username, $customerName, $tableName, $branchId, $branchName, $subtotal, $discount, $discountPercent, $discountType, $discountLabel, $total, $paymentMethod, $paymentReference, $paymentDetails, $cashReceived, $changeAmount, $now);
     $stmt->execute();
     $orderId = $conn->insert_id;
     $stmt->close();

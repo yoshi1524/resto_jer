@@ -54,7 +54,7 @@ function loadIngredients() {
   return apiPost({ action: 'get_ingredients' })
     .then(result => {
       if (result.success) {
-        // FIX: Normalize all numeric fields to JS numbers so === comparisons work reliably
+        
         ingredients = result.ingredients.map(i => ({
           ...i,
           id:    parseInt(i.id)    || 0,
@@ -67,10 +67,9 @@ function loadIngredients() {
     });
 }
 
-// FIX: Removed saveMenu() to localStorage — no longer used for persistence.
-// Kept as no-op so any stray calls don't crash.
-function saveMenu() { /* DB is the source of truth now */ }
-function saveIngredients() { /* DB is the source of truth now */ }
+
+function saveMenu() { }
+function saveIngredients() { }
 function saveTx() { localStorage.setItem('pos_tx', JSON.stringify(transactions)); }
 
 // ─────────────────────────────────────────────────────────────────
@@ -84,20 +83,20 @@ function showPage(page) {
   if (event && event.currentTarget) event.currentTarget.classList.add('active');
 
   if (page === 'menu') {
-    // FIX: Always reload from DB when navigating to menu
+   
     loadMenuFromDB().then(() => renderMenuTable());
   }
   if (page === 'inventory') {
-    // FIX: Reset to items mode on each navigation so restock modal defaults correctly
+   
     inventoryMode = 'items';
     document.getElementById('inventoryModeItems')?.classList.add('active');
     document.getElementById('inventoryModeIngredients')?.classList.remove('active');
-    // Load both menu items and ingredients up front so restock modal is always ready
+   
     Promise.all([loadMenuFromDB(), loadIngredients().catch(() => [])])
       .then(() => renderInventory())
       .catch(() => renderInventory());
   }
-  if (page === 'reports') renderReports();
+  if (page === 'reports') { initReportDates(); if (typeof loadBranchSales === 'function') loadBranchSales(); }
   if (page === 'orders') renderOrderHistory();
   if (page === 'pos') {
     loadMenuFromDB().then(() => renderMenuGrid());
@@ -186,7 +185,7 @@ function renderMenuTable() {
       </span></td>
       <td style="display:flex;gap:6px;">
         <button class="btn btn-ghost btn-sm" onclick="openEditModal(${item.id})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Archive</button>
       </td>
     </tr>`).join('');
 }
@@ -224,7 +223,7 @@ function openEditModal(id) {
   openModal('itemModal');
 }
 
-// FIX: saveItem() now calls api.php instead of localStorage
+
 function saveItem() {
   const name  = document.getElementById('fName').value.trim();
   const price = parseFloat(document.getElementById('fPrice').value);
@@ -248,7 +247,7 @@ function saveItem() {
       if (result.success) {
         toast(editingItemId ? 'Item updated!' : 'Item added!', 'success');
         closeModal('itemModal');
-        // FIX: Reload from DB to reflect truth
+        
         loadMenuFromDB().then(() => { renderMenuTable(); renderMenuGrid(); });
       } else {
         toast(result.message || 'Failed to save item.', 'error');
@@ -257,16 +256,16 @@ function saveItem() {
     .catch(err => toast('Network error: ' + err.message, 'error'));
 }
 
-// FIX: deleteItem() now calls api.php (soft delete/archive)
+
 function deleteItem(id) {
-  if (!confirm('Delete this menu item? It will be archived.')) return;
+  if (!confirm('This menu item will be archived.')) return;
   apiPost({ action: 'delete_menu_item', item_id: id })
     .then(result => {
       if (result.success) {
-        toast('Item deleted.', 'info');
+        toast('Item archived.', 'info');
         loadMenuFromDB().then(() => { renderMenuTable(); renderMenuGrid(); });
       } else {
-        toast(result.message || 'Failed to delete item.', 'error');
+        toast(result.message || 'Failed to archive item.', 'error');
       }
     })
     .catch(err => toast('Network error: ' + err.message, 'error'));
@@ -603,93 +602,275 @@ function doRestock() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// REPORTS
+// REPORTS — Admin: all branches | Manager: own branch only
 // ─────────────────────────────────────────────────────────────────
-function renderReports() {
-  const today   = new Date().toDateString();
-  const todayTx = transactions.filter(t => new Date(t.time).toDateString() === today);
-  const revenue  = todayTx.reduce((s, t) => s + t.total, 0);
-  const discounts = todayTx.reduce((s, t) => s + t.discount, 0);
-  const avg = todayTx.length ? revenue / todayTx.length : 0;
 
+function initReportDates() {
+  const today    = new Date().toISOString().slice(0, 10);
+  const firstDay = today.slice(0, 8) + '01';
+  const fromEl   = document.getElementById('rptDateFrom');
+  const toEl     = document.getElementById('rptDateTo');
+  if (fromEl && !fromEl.value) fromEl.value = firstDay;
+  if (toEl   && !toEl.value)   toEl.value   = today;
+}
+
+// ── ADMIN: all-branch sales ──────────────────────────────────────
+function loadBranchSales() {
+  const dateFrom = document.getElementById('rptDateFrom')?.value || new Date().toISOString().slice(0,8)+'01';
+  const dateTo   = document.getElementById('rptDateTo')?.value   || new Date().toISOString().slice(0,10);
+
+  apiPost({ action: 'get_branch_sales', date_from: dateFrom, date_to: dateTo })
+    .then(result => {
+      if (!result.success) { toast(result.message || 'Failed to load sales.', 'error'); return; }
+      renderAdminReports(result);
+    })
+    .catch(err => toast('Network error: ' + err.message, 'error'));
+}
+
+function renderAdminReports(data) {
+  const branches = data.branches || [];
+  const daily    = data.daily    || [];
+  const items    = data.top_items|| [];
+  const recent   = data.recent   || [];
   const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
-  set('rptRevenue',   '₱' + revenue.toFixed(2));
-  set('rptOrders',    todayTx.length);
-  set('rptTxCount',   transactions.length + ' total transactions');
-  set('rptAvg',       '₱' + avg.toFixed(2));
-  set('rptDiscounts', '₱' + discounts.toFixed(2));
 
-  // Hourly chart
-  const hourData = {};
-  for (let i = 7; i >= 0; i--) {
-    const h = new Date(Date.now() - i * 3600000).getHours();
-    hourData[h] = { label: h + ':00', val: 0 };
+  // ── Totals across all branches ───────────────────────────────
+  const totalRev  = branches.reduce((s,b) => s + parseFloat(b.total_revenue  || 0), 0);
+  const totalOrd  = branches.reduce((s,b) => s + parseInt(b.total_orders     || 0), 0);
+  const totalDisc = branches.reduce((s,b) => s + parseFloat(b.total_discounts|| 0), 0);
+  const avgVal    = totalOrd ? totalRev / totalOrd : 0;
+
+  set('rptRevenue',   '₱' + totalRev.toFixed(2));
+  set('rptOrders',    totalOrd);
+  set('rptTxCount',   totalOrd + ' orders across ' + branches.length + ' branch(es)');
+  set('rptAvg',       '₱' + avgVal.toFixed(2));
+  set('rptDiscounts', '₱' + totalDisc.toFixed(2));
+
+  // ── Per-branch cards ─────────────────────────────────────────
+  const cardsEl = document.getElementById('branchCards');
+  if (cardsEl) {
+    if (!branches.length) {
+      cardsEl.innerHTML = `<div class="card" style="grid-column:1/-1;text-align:center;color:var(--text3);padding:32px;">No sales data for this period.</div>`;
+    } else {
+      const COLORS = ['var(--accent)', 'var(--green)', 'var(--blue)', '#b07ff0', '#e05c9a'];
+      cardsEl.innerHTML = branches.map((b, idx) => {
+        const color   = COLORS[idx % COLORS.length];
+        const pct     = totalRev > 0 ? ((parseFloat(b.total_revenue) / totalRev) * 100).toFixed(1) : '0.0';
+        const cashPct = parseFloat(b.total_revenue) > 0
+          ? ((parseFloat(b.cash_sales) / parseFloat(b.total_revenue)) * 100).toFixed(0) : 0;
+        return `<div class="card" style="border-left:3px solid ${color};">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;">
+            <div>
+              <div style="font-family:'Syne',sans-serif;font-size:15px;font-weight:700;">${b.branch_name}</div>
+              <div style="font-size:11px;color:var(--text3);margin-top:2px;">${pct}% of total revenue</div>
+            </div>
+            <div style="font-family:'Syne',sans-serif;font-size:20px;font-weight:800;color:${color};">₱${parseFloat(b.total_revenue).toFixed(2)}</div>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;">
+            <div style="background:var(--surface2);border-radius:8px;padding:8px;">
+              <div style="color:var(--text3);">Orders</div>
+              <div style="font-weight:700;margin-top:2px;">${b.total_orders}</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:8px;">
+              <div style="color:var(--text3);">Avg Order</div>
+              <div style="font-weight:700;margin-top:2px;">₱${parseFloat(b.avg_order_value).toFixed(2)}</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:8px;">
+              <div style="color:var(--text3);">Discounts</div>
+              <div style="font-weight:700;margin-top:2px;color:var(--green);">₱${parseFloat(b.total_discounts).toFixed(2)}</div>
+            </div>
+            <div style="background:var(--surface2);border-radius:8px;padding:8px;">
+              <div style="color:var(--text3);">Cash %</div>
+              <div style="font-weight:700;margin-top:2px;">${cashPct}%</div>
+            </div>
+          </div>
+          <div style="margin-top:10px;">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:4px;">Payment split</div>
+            <div style="display:flex;gap:4px;height:6px;border-radius:4px;overflow:hidden;">
+              <div style="background:var(--accent);flex:${parseFloat(b.cash_sales)};"></div>
+              <div style="background:var(--green);flex:${parseFloat(b.ewallet_sales)};"></div>
+              <div style="background:var(--blue);flex:${parseFloat(b.online_sales)};"></div>
+            </div>
+            <div style="display:flex;gap:12px;margin-top:4px;font-size:10px;color:var(--text3);">
+              <span style="color:var(--accent);">■ Cash</span>
+              <span style="color:var(--green);">■ E-Wallet</span>
+              <span style="color:var(--blue);">■ Online</span>
+            </div>
+          </div>
+        </div>`;
+      }).join('');
+    }
   }
-  transactions.forEach(t => {
-    const h = new Date(t.time).getHours();
-    if (hourData[h] !== undefined) hourData[h].val += t.total;
+
+  // ── Daily breakdown table ────────────────────────────────────
+  const dailyEl = document.getElementById('dailySalesBody');
+  if (dailyEl) {
+    dailyEl.innerHTML = daily.map(d =>
+      `<tr>
+        <td style="font-weight:500;">${d.sale_date}</td>
+        <td>${d.branch_name}</td>
+        <td>${d.orders}</td>
+        <td style="color:var(--accent);font-weight:700;">₱${parseFloat(d.revenue).toFixed(2)}</td>
+      </tr>`
+    ).join('') || '<tr><td colspan="4" class="empty-state">No data for this period.</td></tr>';
+  }
+
+  // ── Top items (combine across branches) ──────────────────────
+  const itemTotals = {};
+  items.forEach(i => {
+    const key = i.item_name;
+    if (!itemTotals[key]) itemTotals[key] = { name: i.item_name, emoji: i.emoji, qty: 0, rev: 0 };
+    itemTotals[key].qty += parseInt(i.qty_sold  || 0);
+    itemTotals[key].rev += parseFloat(i.revenue || 0);
   });
-  const hours  = Object.values(hourData);
-  const maxVal = Math.max(...hours.map(h => h.val), 1);
-  const hourlyEl = document.getElementById('hourlyChart');
-  if (hourlyEl) {
-    hourlyEl.innerHTML = hours.map(h =>
-      `<div class="chart-bar-col"><div class="chart-val">${h.val ? '₱' + h.val.toFixed(0) : ''}</div><div class="chart-bar" style="height:${(h.val / maxVal) * 100}%;" title="₱${h.val.toFixed(2)}"></div><div class="chart-label">${h.label}</div></div>`
-    ).join('');
-  }
-
-  // Daily summary
-  const dailyTotals = {};
-  transactions.forEach(t => {
-    const key = new Date(t.time).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
-    dailyTotals[key] = (dailyTotals[key] || 0) + t.total;
-  });
-  const dailyBody = document.getElementById('dailySalesBody');
-  if (dailyBody) {
-    const sorted = Object.keys(dailyTotals).sort((a, b) => new Date(b) - new Date(a));
-    dailyBody.innerHTML = sorted.map(date =>
-      `<tr><td style="font-weight:500;">${date}</td><td style="color:var(--accent);font-weight:700;">₱${dailyTotals[date].toFixed(2)}</td></tr>`
-    ).join('') || '<tr><td colspan="2" class="empty-state">No daily data</td></tr>';
-  }
-
-  // Top items
-  const itemSales = {};
-  transactions.forEach(t => t.items.forEach(i => {
-    if (!itemSales[i.name]) itemSales[i.name] = { name: i.name, emoji: i.emoji, qty: 0, rev: 0 };
-    itemSales[i.name].qty += i.qty;
-    itemSales[i.name].rev += i.price * i.qty;
-  }));
-  const top    = Object.values(itemSales).sort((a, b) => b.qty - a.qty).slice(0, 5);
+  const top    = Object.values(itemTotals).sort((a,b) => b.qty - a.qty).slice(0, 8);
   const maxQty = Math.max(...top.map(i => i.qty), 1);
   const topEl  = document.getElementById('topItemsChart');
   if (topEl) {
-    topEl.innerHTML = top.length
-      ? top.map((i, idx) =>
-          `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
-            <span style="font-size:13px;color:var(--text3);min-width:16px;">${idx + 1}</span>
-            <span style="font-size:18px;">${i.emoji || '🍽'}</span>
-            <div style="flex:1;">
-              <div style="font-size:13px;font-weight:500;margin-bottom:4px;">${i.name}</div>
-              <div class="progress-bar"><div class="progress-fill" style="width:${(i.qty / maxQty) * 100}%;background:var(--accent);"></div></div>
-            </div>
-            <span style="font-size:12px;color:var(--text2);">${i.qty} sold</span>
-          </div>`
-        ).join('')
-      : '<div class="empty-state">No sales data yet</div>';
+    topEl.innerHTML = top.length ? top.map((i, idx) =>
+      `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--text3);min-width:16px;">${idx+1}</span>
+        <span style="font-size:18px;">${i.emoji || '🍽'}</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:4px;">${i.name}</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${(i.qty/maxQty)*100}%;background:var(--accent);"></div></div>
+        </div>
+        <span style="font-size:12px;color:var(--text2);">${i.qty} sold</span>
+      </div>`
+    ).join('') : '<div class="empty-state">No sales data yet.</div>';
   }
 
-  // Recent transactions table
-  const txTable = document.getElementById('txTable');
-  if (txTable) {
-    txTable.innerHTML = [...transactions].reverse().slice(0, 10).map(t =>
-      `<tr><td>#${t.id}</td><td>${t.table}</td><td>${t.items.map(i => `${i.emoji} ${i.name}(${i.qty})`).join(', ')}</td><td>₱${t.subtotal.toFixed(2)}</td><td style="color:var(--green);">${t.discount > 0 ? '-₱' + t.discount.toFixed(2) : '—'}</td><td style="color:var(--accent);font-weight:600;">₱${t.total.toFixed(2)}</td><td style="color:var(--text3);">${new Date(t.time).toLocaleTimeString('en-PH', { hour: '2-digit', minute: '2-digit' })}</td></tr>`
-    ).join('') || '<tr><td colspan="7" class="empty-state">No transactions yet</td></tr>';
+  // ── Payment breakdown ────────────────────────────────────────
+  const cashTotal    = branches.reduce((s,b) => s + parseFloat(b.cash_sales    || 0), 0);
+  const ewalletTotal = branches.reduce((s,b) => s + parseFloat(b.ewallet_sales || 0), 0);
+  const onlineTotal  = branches.reduce((s,b) => s + parseFloat(b.online_sales  || 0), 0);
+  const payEl = document.getElementById('paymentBreakdown');
+  if (payEl) {
+    const rows = [
+      { label: '💵 Cash',         val: cashTotal,    color: 'var(--accent)' },
+      { label: '📱 E-Wallet',     val: ewalletTotal, color: 'var(--green)'  },
+      { label: '🏦 Online Bank',  val: onlineTotal,  color: 'var(--blue)'   },
+    ];
+    const maxPay = Math.max(...rows.map(r => r.val), 1);
+    payEl.innerHTML = rows.map(r => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:13px;min-width:110px;color:var(--text2);">${r.label}</span>
+        <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:${(r.val/maxPay)*100}%;background:${r.color};"></div></div>
+        <span style="font-size:13px;font-weight:600;min-width:80px;text-align:right;">₱${r.val.toFixed(2)}</span>
+      </div>`).join('');
+  }
+
+  // ── Recent transactions table ────────────────────────────────
+  const txEl = document.getElementById('txTable');
+  if (txEl) {
+    txEl.innerHTML = recent.map(t =>
+      `<tr>
+        <td style="color:var(--text3);font-size:11px;">${t.order_number}</td>
+        <td><span class="tag tag-yellow" style="font-size:10px;">${t.branch_name}</span></td>
+        <td>${t.table_name}</td>
+        <td style="color:var(--text3);">${t.username || '—'}</td>
+        <td style="color:var(--accent);font-weight:700;">₱${parseFloat(t.total).toFixed(2)}</td>
+        <td>${t.payment_method === 'cash' ? '💵' : t.payment_method === 'e_wallet' ? '📱' : '🏦'} ${t.payment_method}</td>
+        <td style="color:var(--text3);font-size:12px;">${new Date(t.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>`
+    ).join('') || '<tr><td colspan="7" class="empty-state">No transactions in this period.</td></tr>';
+  }
+}
+
+// ── MANAGER: single-branch sales ─────────────────────────────────
+function loadManagerBranchSales(branchId) {
+  if (!branchId) {
+    toast('Your account has no branch assigned. Please contact an admin.', 'error');
+    return;
+  }
+  const dateFrom = document.getElementById('rptDateFrom')?.value || new Date().toISOString().slice(0,8)+'01';
+  const dateTo   = document.getElementById('rptDateTo')?.value   || new Date().toISOString().slice(0,10);
+
+  apiPost({ action: 'get_my_branch_sales', branch_id: branchId, date_from: dateFrom, date_to: dateTo })
+    .then(result => {
+      if (!result.success) { toast(result.message || 'Failed to load sales.', 'error'); return; }
+      renderManagerReports(result);
+    })
+    .catch(err => toast('Network error: ' + err.message, 'error'));
+}
+
+function renderManagerReports(data) {
+  const summary  = data.summary   || {};
+  const daily    = data.daily     || [];
+  const items    = data.top_items || [];
+  const recent   = data.recent    || [];
+  const set = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+
+  set('rptRevenue',   '₱' + parseFloat(summary.total_revenue   || 0).toFixed(2));
+  set('rptOrders',    summary.total_orders || 0);
+  set('rptTxCount',   (summary.total_orders||0) + ' orders this period');
+  set('rptAvg',       '₱' + parseFloat(summary.avg_order_value || 0).toFixed(2));
+  set('rptDiscounts', '₱' + parseFloat(summary.total_discounts || 0).toFixed(2));
+
+  // Payment breakdown
+  const payEl = document.getElementById('paymentBreakdown');
+  if (payEl) {
+    const cashTotal    = parseFloat(summary.cash_sales    || 0);
+    const ewalletTotal = parseFloat(summary.ewallet_sales || 0);
+    const onlineTotal  = parseFloat(summary.online_sales  || 0);
+    const maxPay = Math.max(cashTotal, ewalletTotal, onlineTotal, 1);
+    const rows = [
+      { label: '💵 Cash',        val: cashTotal,    color: 'var(--accent)' },
+      { label: '📱 E-Wallet',    val: ewalletTotal, color: 'var(--green)'  },
+      { label: '🏦 Online Bank', val: onlineTotal,  color: 'var(--blue)'   },
+    ];
+    payEl.innerHTML = rows.map(r => `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:13px;min-width:110px;color:var(--text2);">${r.label}</span>
+        <div class="progress-bar" style="flex:1;"><div class="progress-fill" style="width:${(r.val/maxPay)*100}%;background:${r.color};"></div></div>
+        <span style="font-size:13px;font-weight:600;min-width:80px;text-align:right;">₱${r.val.toFixed(2)}</span>
+      </div>`).join('');
+  }
+
+  const dailyEl = document.getElementById('dailySalesBody');
+  if (dailyEl) {
+    dailyEl.innerHTML = daily.map(d =>
+      `<tr>
+        <td style="font-weight:500;">${d.sale_date}</td>
+        <td style="color:var(--accent);font-weight:700;">₱${parseFloat(d.revenue).toFixed(2)}</td>
+        <td>${d.orders}</td>
+      </tr>`
+    ).join('') || '<tr><td colspan="3" class="empty-state">No data for this period.</td></tr>';
+  }
+
+  const maxQty = Math.max(...items.map(i => parseInt(i.qty_sold||0)), 1);
+  const topEl  = document.getElementById('topItemsChart');
+  if (topEl) {
+    topEl.innerHTML = items.length ? items.map((i, idx) =>
+      `<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+        <span style="font-size:12px;color:var(--text3);min-width:16px;">${idx+1}</span>
+        <span style="font-size:18px;">${i.emoji||'🍽'}</span>
+        <div style="flex:1;">
+          <div style="font-size:13px;font-weight:500;margin-bottom:4px;">${i.item_name}</div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${(parseInt(i.qty_sold)/maxQty)*100}%;background:var(--accent);"></div></div>
+        </div>
+        <span style="font-size:12px;color:var(--text2);">${i.qty_sold} sold</span>
+      </div>`
+    ).join('') : '<div class="empty-state">No sales data yet.</div>';
+  }
+
+  const txEl = document.getElementById('txTable');
+  if (txEl) {
+    txEl.innerHTML = recent.map(t =>
+      `<tr>
+        <td style="color:var(--text3);font-size:11px;">${t.order_number}</td>
+        <td>${t.table_name}</td>
+        <td style="color:var(--text3);">${t.username||'—'}</td>
+        <td style="color:var(--accent);font-weight:700;">₱${parseFloat(t.total).toFixed(2)}</td>
+        <td>${t.payment_method==='cash'?'💵':t.payment_method==='e_wallet'?'📱':'🏦'} ${t.payment_method}</td>
+        <td style="color:var(--text3);font-size:12px;">${new Date(t.created_at).toLocaleString('en-PH',{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}</td>
+      </tr>`
+    ).join('') || '<tr><td colspan="6" class="empty-state">No transactions in this period.</td></tr>';
   }
 }
 
 function clearSalesData() {
-  if (!confirm('Clear all sales data?')) return;
-  transactions = []; saveTx(); renderReports(); toast('Sales data cleared.', 'info');
+  toast('Sales data is stored in the database and cannot be cleared from here.', 'info');
 }
 
 function renderOrderHistory() {
