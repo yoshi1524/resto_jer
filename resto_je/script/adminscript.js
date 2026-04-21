@@ -165,7 +165,7 @@ function renderMenuTable() {
       </span></td>
       <td style="display:flex;gap:6px;">
         <button class="btn btn-ghost btn-sm" onclick="openEditModal(${item.id})">Edit</button>
-        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Delete</button>
+        <button class="btn btn-danger btn-sm" onclick="deleteItem(${item.id})">Archive</button>
       </td>
     </tr>`).join('');
 }
@@ -238,14 +238,14 @@ function saveItem() {
 
 
 function deleteItem(id) {
-  if (!confirm('Delete this menu item? It will be archived.')) return;
+  if (!confirm('Archive this menu item? It will be archived.')) return;
   apiPost({ action: 'delete_menu_item', item_id: id })
     .then(result => {
       if (result.success) {
-        toast('Item deleted.', 'info');
+        toast('Item archived.', 'info');
         loadMenuFromDB().then(() => { renderMenuTable(); renderMenuGrid(); });
       } else {
-        toast(result.message || 'Failed to delete item.', 'error');
+        toast(result.message || 'Failed to archive item.', 'error');
       }
     })
     .catch(err => toast('Network error: ' + err.message, 'error'));

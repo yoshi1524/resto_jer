@@ -325,7 +325,15 @@ if ($action === 'archive_menu_item') {
     }
     exit;
 }
-
+// api.php
+if ($action === 'save_transaction') {
+    $staff_id = $user['id']; // ID of the staff member currently logged in
+    
+    // Include user_id in your INSERT statement
+    $stmt = $conn->prepare("INSERT INTO sales_transactions (total_amount, user_id, created_at) VALUES (?, ?, NOW())");
+    $stmt->bind_param("di", $total_amount, $staff_id);
+    $stmt->execute();
+}
 // ─────────────────────────────────────────────
 // FALLBACK
 // ─────────────────────────────────────────────

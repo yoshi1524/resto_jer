@@ -29,6 +29,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'creat
         }
     }
 }
+// managerr.php
+// Get the logged-in manager's branch
+$manager_branch = $user['branch_id']?? 0; 
+
+$query = "SELECT SUM(t.total_amount) as daily_total 
+          FROM sales_transactions t
+          JOIN users u ON t.user_id = u.id 
+          WHERE u.branch_id = ? 
+          AND DATE(t.created_at) = CURDATE()";
+
+$stmt = $conn->prepare($query);
+$stmt->bind_param("i", $manager_branch);
+$stmt->execute();
+$result = $stmt->get_result();
+$row = $result->fetch_assoc();
+
+$branch_daily_sales = $row['daily_total'] ?? 0;
+
 
 $users = getUsers($conn);
 ?>
