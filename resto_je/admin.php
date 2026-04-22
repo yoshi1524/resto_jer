@@ -183,13 +183,13 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         </div>
       </div>
 
-      <div class="card" style="overflow:auto;max-height:280px;">
+      <!--<div class="card" style="overflow:auto;max-height:280px;">
         <div class="card-title">Recent Transactions — All Branches</div>
         <table>
           <thead><tr><th>Order #</th><th>Branch</th><th>Table</th><th>Staff</th><th>Total</th><th>Method</th><th>Time</th></tr></thead>
           <tbody id="txTable"></tbody>
         </table>
-      </div>
+      </div>-->
     </div>
 
     <!-- MENU PAGE -->
