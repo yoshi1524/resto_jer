@@ -7,7 +7,7 @@ ensureSchema($conn);
 requireLogin();
 $user = currentUser();
 
-// FIX: Read php://input ONCE — calling it twice returns empty on the second call
+
 $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true) ?: [];
 $action = $payload['action'] ?? $_POST['action'] ?? null;

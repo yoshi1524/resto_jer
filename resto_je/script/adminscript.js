@@ -510,12 +510,10 @@ function renderInventory() {
 
 function setInventoryMode(mode) {
   inventoryMode = mode;
-  document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
+  //document.getElementById('inventoryModeItems')?.classList.toggle('active', mode === 'items');
   document.getElementById('inventoryModeIngredients')?.classList.toggle('active', mode === 'ingredients');
 
-  // FIX: Load the correct data source before rendering.
-  // Previously switching to 'ingredients' never fetched from DB,
-  // so the ingredients array was always empty — dropdown showed nothing.
+  
   if (mode === 'ingredients') {
     loadIngredients()
       .then(() => renderInventory())

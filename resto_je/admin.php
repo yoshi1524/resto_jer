@@ -43,12 +43,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'archi
     $data = $res ? $res->fetch_assoc() : null;
 
     if ($data) {
-        $name      = $data['username'] ?? $data['name'];
-        $json_data = json_encode($data);
-        $stmt = $conn->prepare("INSERT INTO archived_records (original_id, record_type, record_name, data_snapshot) VALUES (?, ?, ?, ?)");
-        $stmt->bind_param("isss", $id, $type, $name, $json_data);
+
+        $stmt = $conn->prepare("UPDATE `$table` SET status = 'archived' WHERE id = ?");
+        $stmt->bind_param("i", $id);
         if ($stmt->execute()) {
-            $conn->query("DELETE FROM `$table` WHERE id = $id");
+            $name = $data['username'] ?? $data['name'];
+            logAction($conn, $user['id'], $user['username'], 'archive_' . $type, "Archived {$type} '{$name}' (id={$id})");
             $message = "Record archived successfully.";
         } else {
             $error = "Failed to archive record.";
@@ -56,13 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'archi
     } else {
         $error = "Record not found.";
     }
-    // FIX: Added exit after redirect so PHP stops executing
     header("Location: admin.php");
     exit;
 }
 
-// ── Data for page ────────────────────────────────────────────────
+// Data for page ────────────────────────────────────────────────
 $users = getUsers($conn);
+$active_users = array_filter($users, fn($u) => ($u['status'] ?? 'active') !== 'archived');
 $branch_list = [];
 $b_res = $conn->query("SELECT id, branch_name FROM branches ORDER BY branch_name ASC");
 if ($b_res) {
@@ -109,7 +109,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div class="logo-sub">Admin Dashboard</div>
     </div>
     <nav class="nav">
-      <div class="nav-item" onclick="showPage('reports')">
+      <div class="nav-item active" onclick="showPage('reports')">
         <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
         Sales Reports
       </div>
@@ -142,7 +142,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
   <div class="main">
 
     <!-- REPORTS PAGE -->
-    <div id="page-reports" class="page" style="flex-direction:column;gap:16px;">
+    <div id="page-reports" class="page active" style="flex-direction:column;gap:16px;">
       <div class="section-header" style="margin-bottom:0;flex-wrap:wrap;gap:10px;">
         <div class="section-title">Sales Reports — All Branches</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
@@ -203,8 +203,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
           <thead>
             <tr><th>Item</th><th>Category</th><th>Price</th><th>Stock</th><th>Status</th><th>Actions</th></tr>
           </thead>
-          <!-- FIX: tbody is now populated by adminscript.js via renderMenuTable()
-               which fetches from DB. The old PHP render was overwritten by JS anyway. -->
+
           <tbody id="menuTableBody"></tbody>
         </table>
       </div>
@@ -216,14 +215,12 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
         <div>
           <div class="section-title">Inventory Tracking</div>
           <div style="display:flex;gap:8px;margin-top:10px;">
-            <!--<button class="btn btn-ghost btn-sm active" id="inventoryModeItems" onclick="setInventoryMode('items')">Items</button>-->
-            <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
+            <button class="btn btn-ghost btn-sm active" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
           </div>
         </div>
         <button class="btn btn-accent" onclick="openRestockModal()">+ Restock</button>
       </div>
-      <!-- FIX: Stat cards now have JS-updatable IDs (invInStock etc.)
-           PHP values are used as initial server-rendered values; JS updates them on navigation -->
+
       <div class="grid-4" style="margin-bottom:4px;">
         <div class="stat-card green">
           <div class="stat-label">In Stock</div>
@@ -246,7 +243,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
           <div class="stat-sub" id="invTotalSub">Menu items</div>
         </div>
       </div>
-      <!-- FIX: Added the inventory table that was completely missing from admin.php -->
+   
       <div class="card" style="flex:1;overflow:auto;">
         <table>
           <thead id="inventoryHeader"></thead>
@@ -306,16 +303,14 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
               <tr><th>Username</th><th>Role</th><th>Status</th><th>Created</th><th>Action</th></tr>
             </thead>
             <tbody>
-              <?php foreach ($users as $u): ?>
+              <?php foreach ($active_users as $u): ?>
                 <tr>
                   <td><?= htmlspecialchars($u['username']) ?></td>
                   <td><?= htmlspecialchars(ucfirst($u['role'])) ?></td>
                   <td><?= htmlspecialchars(ucfirst($u['status'])) ?></td>
                   <td><?= htmlspecialchars($u['created_at']) ?></td>
                   <td>
-                    <!-- FIX: Archive form now uses correct PHP variable $u['id'] in PHP context,
-                         not inside a JS string where it would render blank -->
-                    <form method="POST" style="display:inline;" onsubmit="return confirm('Archive this user?')">
+                    <form method="POST" style="display:inline;" onsubmit="return confirm('Archive this user? They will no longer be able to log in.')">
                       <input type="hidden" name="action" value="archive_record">
                       <input type="hidden" name="id" value="<?= (int)$u['id'] ?>">
                       <input type="hidden" name="type" value="user">
@@ -344,8 +339,8 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       </div>
     </div>
 
-  </div><!-- /.main -->
-</div><!-- /.app -->
+  </div>
+</div>
 
 <!-- MODALS -->
 <div class="modal-overlay" id="itemModal">
@@ -441,7 +436,7 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
       <div style="font-size:12px;color:var(--text3);margin-top:8px;">Change</div>
       <div class="receipt-change" id="rcChange"></div>
     </div>
-    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us! 🙏</div>
+    <div style="text-align:center;font-size:12px;color:var(--text3);margin-top:16px;">Thank you for dining with us!</div>
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeModal('receiptModal')">Close</button>
       <button class="btn btn-accent" onclick="printReceipt()">🖨 Print</button>
@@ -451,7 +446,18 @@ $totalCount      = (int)$conn->query("SELECT COUNT(*) FROM menu_items WHERE stat
 
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- FIX: Was <link rel="script"> which does nothing. Now a proper script tag. -->
+
 <script src="script/adminscript.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var origShowPage = window.showPage;
+    window.showPage = function(page) {
+        origShowPage(page);
+        if (page === 'inventory' && typeof setInventoryMode === 'function') {
+            setInventoryMode('ingredients');
+        }
+    };
+});
+</script>
 </body>
 </html>

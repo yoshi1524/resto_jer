@@ -164,7 +164,7 @@ $users = getUsers($conn);
           <div class="section-title">Inventory Tracking</div>
           <div style="display:flex;gap:8px;margin-top:10px;">
             
-            <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
+            <button class="btn btn-ghost btn-sm active" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
           </div>
         </div>
         <button class="btn btn-accent" onclick="openRestockModal()">+ Restock</button>
@@ -330,8 +330,19 @@ $users = getUsers($conn);
 
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- FIX: Removed the entire inline <script> block that used localStorage.
-     Now uses the shared adminscript.js which reads/writes to DB via api.php. -->
+
 <script src="script/adminscript.js"></script>
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+    var origShowPage = window.showPage;
+    window.showPage = function(page) {
+        origShowPage(page);
+        if (page === 'inventory' && typeof setInventoryMode === 'function') {
+            setInventoryMode('ingredients');
+        }
+    };
+});
+</script>
 </body>
 </html>
