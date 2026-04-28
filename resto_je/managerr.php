@@ -164,7 +164,7 @@ $users = getUsers($conn);
           <div class="section-title">Inventory Tracking</div>
           <div style="display:flex;gap:8px;margin-top:10px;">
             
-            <button class="btn btn-ghost btn-sm" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
+            <button class="btn btn-ghost btn-sm active" id="inventoryModeIngredients" onclick="setInventoryMode('ingredients')">Ingredients</button>
           </div>
         </div>
         <button class="btn btn-accent" onclick="openRestockModal()">+ Restock</button>
@@ -197,21 +197,23 @@ $users = getUsers($conn);
       </div>
       <div class="grid-2" style="flex:1;min-height:0;">
         <div style="display:flex;flex-direction:column;gap:16px;">
-          <div class="card" style="overflow:auto;">
+          <!--<div class="card" style="overflow:auto;">
             <div class="card-title">Sales by Hour</div>
             <div class="chart-bar-wrap" id="hourlyChart"></div>
-          </div>
-          <div class="card" style="flex:1;overflow:auto;">
+          </div>-->
+          <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
             <div class="card-title">Daily Sales Summary</div>
-            <table class="user-table">
-              <thead><tr><th>Date</th><th>Revenue</th></tr></thead>
-              <tbody id="dailySalesBody"></tbody>
-            </table>
+            <div style="overflow-y:auto;max-height:260px;">
+              <table class="user-table">
+                <thead><tr><th>Date</th><th>Revenue</th></tr></thead>
+                <tbody id="dailySalesBody"></tbody>
+              </table>
+            </div>
           </div>
         </div>
-        <div class="card" style="overflow:auto;">
+        <div class="card" style="overflow:hidden;display:flex;flex-direction:column;">
           <div class="card-title">Top Selling Items</div>
-          <div id="topItemsChart"></div>
+          <div id="topItemsChart" style="overflow-y:auto;max-height:260px;"></div>
         </div>
       </div>
       <div class="card" style="overflow:auto;max-height:260px;">
@@ -246,7 +248,7 @@ $users = getUsers($conn);
         <select class="form-input" id="fCategory">
           <option>Sizzling Favorites</option>
           <option>Country Classics</option>
-          <option>Heart Lover's Delight</option>
+          <option>Heart Lovers Delight</option>
           <option>Sandwiches &amp; Snacks</option>
           <option>Desserts</option>
           <option>Cream Soups</option>
@@ -330,8 +332,19 @@ $users = getUsers($conn);
 
 <div class="toast-container" id="toastContainer"></div>
 
-<!-- FIX: Removed the entire inline <script> block that used localStorage.
-     Now uses the shared adminscript.js which reads/writes to DB via api.php. -->
+
 <script src="script/adminscript.js"></script>
+<script>
+
+document.addEventListener('DOMContentLoaded', function () {
+    var origShowPage = window.showPage;
+    window.showPage = function(page) {
+        origShowPage(page);
+        if (page === 'inventory' && typeof setInventoryMode === 'function') {
+            setInventoryMode('ingredients');
+        }
+    };
+});
+</script>
 </body>
 </html>
