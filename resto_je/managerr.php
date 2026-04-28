@@ -205,7 +205,7 @@ $users = getUsers($conn);
             <div class="card-title">Daily Sales Summary</div>
             <div style="overflow-y:auto;max-height:260px;">
               <table class="user-table">
-                <thead><tr><th>Date</th><th>Revenue</th></tr></thead>
+                <thead><tr><th>Date</th><th>Revenue</th><th>Orders</th></tr></thead>
                 <tbody id="dailySalesBody"></tbody>
               </table>
             </div>
