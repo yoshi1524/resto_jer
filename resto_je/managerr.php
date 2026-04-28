@@ -200,8 +200,8 @@ $users = getUsers($conn);
           <!--<div class="card" style="overflow:auto;">
             <div class="card-title">Sales by Hour</div>
             <div class="chart-bar-wrap" id="hourlyChart"></div>
-          </div>-->
-          <div class="card" style="flex:1;overflow:hidden;display:flex;flex-direction:column;">
+          </div>
+          <div class="card" style="flex:1;overflow:auto;">
             <div class="card-title">Daily Sales Summary</div>
             <div style="overflow-y:auto;max-height:260px;">
               <table class="user-table">
