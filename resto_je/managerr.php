@@ -76,6 +76,8 @@ $users = getUsers($conn);
 .sidebar-section-header { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text3); font-weight: 600; cursor: pointer; padding: 8px 0; text-transform: uppercase; letter-spacing: 0.5px; }
 .sidebar-section-header svg { width: 14px; height: 14px; }
 .sidebar-section-toggle { margin-left: auto; transition: transform 0.2s; }
+.menu-photo { width: 48px; height: 48px; object-fit: cover; border-radius: 12px; margin-right: 8px; display: inline-block; vertical-align: middle; }
+.photo-preview img { width: 100%; max-height: 120px; object-fit: cover; border-radius: 12px; margin-top: 8px; }
 </style>
 </head>
 <body>
@@ -234,8 +236,12 @@ $users = getUsers($conn);
     <div class="modal-title" id="itemModalTitle">Add Menu Item</div>
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Emoji Icon</label>
-        <input class="form-input" id="fEmoji" placeholder="e.g. 🍕" maxlength="4"/>
+        <label class="form-label">Item Photo</label>
+        <input class="form-input" id="fPhoto" type="file" accept="image/*"/>
+        <input type="hidden" id="fImagePath" />
+        <div class="photo-preview" id="photoPreviewContainer" style="display:none;">
+          <img id="photoPreview" src="" alt="Photo preview" />
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Item Name *</label>

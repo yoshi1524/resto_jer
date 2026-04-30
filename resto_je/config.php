@@ -48,6 +48,7 @@ function ensureSchema(mysqli $conn) {
     $conn->query("CREATE TABLE IF NOT EXISTS menu_items (
         id INT AUTO_INCREMENT PRIMARY KEY,
         emoji VARCHAR(10) NULL,
+        image_path VARCHAR(255) NULL,
         name VARCHAR(100) NOT NULL,
         category VARCHAR(100) NOT NULL,
         price DECIMAL(10,2) NOT NULL DEFAULT 0,
@@ -60,6 +61,7 @@ function ensureSchema(mysqli $conn) {
         INDEX(name), INDEX(category), INDEX(status), INDEX(stock), INDEX(created_at)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 
+    $conn->query("ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS image_path VARCHAR(255) NULL");
     // FIX: Add 'archived' to status ENUM if it doesn't exist yet (for existing DBs)
     $conn->query("ALTER TABLE menu_items MODIFY COLUMN status ENUM('available','unavailable','archived') NOT NULL DEFAULT 'available'");
 

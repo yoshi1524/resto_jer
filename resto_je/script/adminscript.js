@@ -38,9 +38,10 @@ function loadMenuFromDB() {
         // FIX: Normalize numeric fields so id comparisons with === always work
         menuItems = result.items.map(i => ({
           ...i,
-          id:    parseInt(i.id)      || 0,
-          price: parseFloat(i.price) || 0,
-          stock: parseInt(i.stock)   || 0
+          id:         parseInt(i.id)      || 0,
+          price:      parseFloat(i.price) || 0,
+          stock:      parseInt(i.stock)   || 0,
+          image_path: i.image_path || ''
         }));
         nextId = Math.max(...menuItems.map(i => i.id), 0) + 1;
       } else {
@@ -153,8 +154,11 @@ function renderMenuGrid() {
   grid.innerHTML = items.map(item => {
     const unavail = item.status === 'unavailable' || item.stock === 0;
     const stockStatus = item.stock === 0 ? 'out' : item.stock <= 5 ? 'low' : '';
+    const icon = item.image_path
+      ? `<img class="menu-photo" src="${item.image_path}" alt="${item.name}" onerror="this.style.display='none'" />`
+      : `<span class="menu-emoji">${item.emoji || '🍽'}</span>`;
     return `<div class="menu-item ${unavail ? 'unavailable' : ''}" onclick="${unavail ? '' : `addToCart(${item.id})`}">
-      <span class="menu-emoji">${item.emoji || '🍽'}</span>
+      ${icon}
       <div class="menu-cat-badge">${item.category}</div>
       <div class="menu-name">${item.name}</div>
       <div class="menu-price">₱${parseFloat(item.price).toFixed(2)}</div>
@@ -176,7 +180,7 @@ function renderMenuTable() {
   }
   body.innerHTML = menuItems.map(item => `
     <tr>
-      <td><span style="font-size:20px;margin-right:8px;">${item.emoji || '🍽'}</span>${item.name}</td>
+      <td>${item.image_path ? `<img class="menu-photo" src="${item.image_path}" alt="${item.name}" onerror="this.style.display='none'" />` : `<span style="font-size:20px;margin-right:8px;">${item.emoji || '🍽'}</span>`}${item.name}</td>
       <td><span class="tag tag-yellow">${item.category}</span></td>
       <td>₱${parseFloat(item.price).toFixed(2)}</td>
       <td>${item.stock}</td>
@@ -197,10 +201,11 @@ function openAddItemModal() {
   editingItemId = null;
   const titleEl = document.getElementById('itemModalTitle');
   if (titleEl) titleEl.textContent = 'Add Menu Item';
-  ['fEmoji', 'fName', 'fPrice', 'fStock'].forEach(id => {
+  ['fPhoto', 'fImagePath', 'fEmoji', 'fName', 'fPrice', 'fStock'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = '';
   });
+  updatePhotoPreview();
   const cat = document.getElementById('fCategory');
   if (cat) cat.value = 'Sizzling Favorites';
   const stat = document.getElementById('fStatus');
@@ -214,12 +219,15 @@ function openEditModal(id) {
   editingItemId = id;
   const titleEl = document.getElementById('itemModalTitle');
   if (titleEl) titleEl.textContent = 'Edit Menu Item';
-  document.getElementById('fEmoji').value    = item.emoji || '';
-  document.getElementById('fName').value     = item.name;
-  document.getElementById('fCategory').value = item.category;
-  document.getElementById('fPrice').value    = item.price;
-  document.getElementById('fStock').value    = item.stock;
-  document.getElementById('fStatus').value   = item.status;
+  document.getElementById('fPhoto').value     = '';
+  document.getElementById('fImagePath').value = item.image_path || '';
+  document.getElementById('fEmoji').value     = item.emoji || '';
+  document.getElementById('fName').value      = item.name;
+  document.getElementById('fCategory').value  = item.category;
+  document.getElementById('fPrice').value     = item.price;
+  document.getElementById('fStock').value     = item.stock;
+  document.getElementById('fStatus').value    = item.status;
+  updatePhotoPreview();
   openModal('itemModal');
 }
 
@@ -230,24 +238,31 @@ function saveItem() {
   if (!name)          { toast('Item name required!', 'error'); return; }
   if (!price || price <= 0) { toast('Valid price required!', 'error'); return; }
 
-  const data = {
-    id:       editingItemId,
-    emoji:    document.getElementById('fEmoji').value || '🍽',
-    name,
-    category: document.getElementById('fCategory').value,
-    price,
-    stock:    parseInt(document.getElementById('fStock').value) || 0,
-    status:   document.getElementById('fStatus').value
-  };
+  const form = new FormData();
+  form.append('action', editingItemId ? 'update_menu_item' : 'add_menu_item');
+  if (editingItemId) form.append('item[id]', editingItemId);
+  form.append('item[emoji]', document.getElementById('fEmoji').value || '🍽');
+  form.append('item[name]', name);
+  form.append('item[category]', document.getElementById('fCategory').value);
+  form.append('item[price]', price);
+  form.append('item[stock]', parseInt(document.getElementById('fStock').value) || 0);
+  form.append('item[status]', document.getElementById('fStatus').value);
+  form.append('image_path', document.getElementById('fImagePath').value || '');
 
-  const action = editingItemId ? 'update_menu_item' : 'add_menu_item';
+  const fileInput = document.getElementById('fPhoto');
+  if (fileInput && fileInput.files && fileInput.files[0]) {
+    form.append('photo', fileInput.files[0]);
+  }
 
-  apiPost({ action, item: data })
+  fetch('api.php', { method: 'POST', credentials: 'same-origin', body: form })
+    .then(async r => {
+      const text = await r.text();
+      try { return JSON.parse(text); } catch (e) { throw new Error('Server returned non-JSON: ' + text.slice(0, 200)); }
+    })
     .then(result => {
       if (result.success) {
         toast(editingItemId ? 'Item updated!' : 'Item added!', 'success');
         closeModal('itemModal');
-        
         loadMenuFromDB().then(() => { renderMenuTable(); renderMenuGrid(); });
       } else {
         toast(result.message || 'Failed to save item.', 'error');
@@ -269,6 +284,33 @@ function deleteItem(id) {
       }
     })
     .catch(err => toast('Network error: ' + err.message, 'error'));
+}
+
+function updatePhotoPreview() {
+  const previewContainer = document.getElementById('photoPreviewContainer');
+  const preview = document.getElementById('photoPreview');
+  const fileInput = document.getElementById('fPhoto');
+  const hiddenPath = document.getElementById('fImagePath');
+  if (!previewContainer || !preview || !fileInput) return;
+
+  const file = fileInput.files[0];
+  if (file) {
+    preview.src = URL.createObjectURL(file);
+    previewContainer.style.display = 'block';
+    return;
+  }
+
+  if (hiddenPath && hiddenPath.value) {
+    preview.src = hiddenPath.value;
+    previewContainer.style.display = 'block';
+  } else {
+    previewContainer.style.display = 'none';
+  }
+}
+
+const photoInput = document.getElementById('fPhoto');
+if (photoInput) {
+  photoInput.addEventListener('change', updatePhotoPreview);
 }
 
 // ─────────────────────────────────────────────────────────────────

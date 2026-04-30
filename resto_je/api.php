@@ -12,6 +12,32 @@ $raw = file_get_contents('php://input');
 $payload = json_decode($raw, true) ?: [];
 $action = $payload['action'] ?? $_POST['action'] ?? null;
 
+function saveMenuPhoto() {
+    if (empty($_FILES['photo']) || !is_array($_FILES['photo'])) {
+        return null;
+    }
+    $file = $_FILES['photo'];
+    if ($file['error'] !== UPLOAD_ERR_OK) {
+        return null;
+    }
+    $allowed = ['jpg','jpeg','png','gif','webp'];
+    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, $allowed, true)) {
+        throw new Exception('Invalid photo format. Allowed formats: jpg, jpeg, png, gif, webp.');
+    }
+    $uploadDir = __DIR__ . '/assets/menu_photos';
+    if (!is_dir($uploadDir) && !mkdir($uploadDir, 0755, true)) {
+        throw new Exception('Unable to create image upload directory.');
+    }
+    $fileName = 'menu_' . time() . '_' . bin2hex(random_bytes(6)) . '.' . $ext;
+    $dest = $uploadDir . '/' . $fileName;
+    if (!move_uploaded_file($file['tmp_name'], $dest)) {
+        throw new Exception('Failed to save uploaded photo.');
+    }
+    return 'assets/menu_photos/' . $fileName;
+}
+
+
 // ─────────────────────────────────────────────
 // ─────────────────────────────────────────────────────────────────
 // GET BRANCH SALES SUMMARY — ALL BRANCHES (Admin)
@@ -164,19 +190,20 @@ if ($action === 'get_menu_items') {
 // ADD MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'add_menu_item') {
-    $item = $payload['item'] ?? null;
+    $item = $_POST['item'] ?? $payload['item'] ?? null;
     if (!is_array($item) || empty($item['name']) || !isset($item['price'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Item name and price are required.']);
         exit;
     }
 
-    $name     = trim($item['name']);
-    $price    = floatval($item['price']);
-    $category = trim($item['category'] ?? '');
-    $stock    = intval($item['stock'] ?? 0);
-    $emoji    = trim($item['emoji'] ?? '🍽');
-    $status   = trim($item['status'] ?? 'available');
+    $name      = trim($item['name']);
+    $price     = floatval($item['price']);
+    $category  = trim($item['category'] ?? '');
+    $stock     = intval($item['stock'] ?? 0);
+    $emoji     = trim($item['emoji'] ?? '🍽');
+    $status    = trim($item['status'] ?? 'available');
+    $imagePath = trim($_POST['image_path'] ?? ($item['image_path'] ?? '')) ?: null;
 
     if ($price <= 0) {
         http_response_code(400);
@@ -185,10 +212,15 @@ if ($action === 'add_menu_item') {
     }
 
     try {
+        $uploadedPath = saveMenuPhoto();
+        if ($uploadedPath) {
+            $imagePath = $uploadedPath;
+        }
+
         $stmt = $conn->prepare(
-            "INSERT INTO menu_items (name, price, category, stock, emoji, status) VALUES (?, ?, ?, ?, ?, ?)"
+            "INSERT INTO menu_items (name, price, category, stock, emoji, status, image_path) VALUES (?, ?, ?, ?, ?, ?, ?)"
         );
-        $stmt->bind_param("sdsiss", $name, $price, $category, $stock, $emoji, $status);
+        $stmt->bind_param("sdsisss", $name, $price, $category, $stock, $emoji, $status, $imagePath);
         $stmt->execute();
         $newId = (int)$conn->insert_id;
         logAction($conn, $user['id'], $user['username'], 'add_menu_item', "Added menu item: {$name}");
@@ -204,20 +236,21 @@ if ($action === 'add_menu_item') {
 // UPDATE MENU ITEM 
 // ─────────────────────────────────────────────
 if ($action === 'update_menu_item') {
-    $item = $payload['item'] ?? null;
+    $item = $_POST['item'] ?? $payload['item'] ?? null;
     if (!is_array($item) || empty($item['id'])) {
         http_response_code(400);
         echo json_encode(['success' => false, 'message' => 'Item ID is required.']);
         exit;
     }
 
-    $id       = intval($item['id']);
-    $name     = trim($item['name'] ?? '');
-    $price    = floatval($item['price'] ?? 0);
-    $category = trim($item['category'] ?? '');
-    $stock    = intval($item['stock'] ?? 0);
-    $emoji    = trim($item['emoji'] ?? '🍽');
-    $status   = trim($item['status'] ?? 'available');
+    $id        = intval($item['id']);
+    $name      = trim($item['name'] ?? '');
+    $price     = floatval($item['price'] ?? 0);
+    $category  = trim($item['category'] ?? '');
+    $stock     = intval($item['stock'] ?? 0);
+    $emoji     = trim($item['emoji'] ?? '🍽');
+    $status    = trim($item['status'] ?? 'available');
+    $imagePath = trim($_POST['image_path'] ?? ($item['image_path'] ?? '')) ?: null;
 
     if (!$name || $price <= 0) {
         http_response_code(400);
@@ -226,10 +259,15 @@ if ($action === 'update_menu_item') {
     }
 
     try {
+        $uploadedPath = saveMenuPhoto();
+        if ($uploadedPath) {
+            $imagePath = $uploadedPath;
+        }
+
         $stmt = $conn->prepare(
-            "UPDATE menu_items SET name=?, price=?, category=?, stock=?, emoji=?, status=? WHERE id=?"
+            "UPDATE menu_items SET name=?, price=?, category=?, stock=?, emoji=?, status=?, image_path=? WHERE id=?"
         );
-        $stmt->bind_param("sdsissi", $name, $price, $category, $stock, $emoji, $status, $id);
+        $stmt->bind_param("sdsisssi", $name, $price, $category, $stock, $emoji, $status, $imagePath, $id);
         $stmt->execute();
         logAction($conn, $user['id'], $user['username'], 'update_menu_item', "Updated menu item #{$id}: {$name}");
         echo json_encode(['success' => true]);
