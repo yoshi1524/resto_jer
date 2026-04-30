@@ -116,7 +116,10 @@ $user = $_SESSION['user'];
   .menu-item:hover { border-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
   .menu-item.unavailable { opacity: 0.4; cursor: not-allowed; }
   .menu-item.unavailable:hover { transform: none; border-color: var(--border); }
-  .menu-emoji { font-size: 32px; margin-bottom: 8px; display: block; }
+  .menu-emoji, .menu-photo { margin-bottom: 8px; display: block; }
+  .menu-emoji { font-size: 32px; }
+  .menu-photo { width: 100%; height: 120px; object-fit: cover; border-radius: 12px; }
+  .table-photo { width: 28px; height: 28px; object-fit: cover; border-radius: 8px; margin-right: 8px; vertical-align: middle; display: inline-block; }
   .menu-name { font-family: 'Syne', sans-serif; font-size: 14px; font-weight: 600; margin-bottom: 4px; }
   .menu-price { font-size: 15px; font-weight: 500; color: var(--accent); }
   .menu-cat-badge { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
@@ -548,8 +551,8 @@ $user = $_SESSION['user'];
 <script>
 // ============ STATE ============
 let menuItems = JSON.parse(localStorage.getItem('pos_menu') || 'null') || [
-  { id:1, emoji:'🍗', name:'Fried Chicken', category:'Country Classics', price:185, stock:20, status:'available' },
-  { id:2, emoji:'🍝', name:'Spaghetti', category:'Sizzling Favorites', price:150, stock:15, status:'available' },
+  { id:1, emoji:'🍗', image_path:'', name:'Fried Chicken', category:'Country Classics', price:185, stock:20, status:'available' },
+  { id:2, emoji:'🍝', image_path:'', name:'Spaghetti', category:'Sizzling Favorites', price:150, stock:15, status:'available' },
   { id:3, emoji:'🍣', name:'Salmon Sashimi', category:'Heart Lovers Delight', price:320, stock:8, status:'available' },
   { id:4, emoji:'🥗', name:'Caesar Salad', category:'Heart Lovers Delight', price:120, stock:12, status:'available' },
   { id:5, emoji:'🍲', name:'Sinigang na Baboy', category:'Country Classics', price:175, stock:10, status:'available' },
@@ -577,6 +580,34 @@ let nextId = Math.max(...menuItems.map(i=>i.id), 0) + 1;
 function saveMenu() { localStorage.setItem('pos_menu', JSON.stringify(menuItems)); }
 function saveIngredients() { /* Ingredients are now saved to database */ }
 function saveTx() { localStorage.setItem('pos_tx', JSON.stringify(transactions)); }
+
+function loadMenuFromDB() {
+  return fetch('api.php', {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action: 'get_menu_items' })
+  })
+  .then(async r => {
+    const text = await r.text();
+    try { return JSON.parse(text); } catch (err) { throw new Error('Invalid JSON response from server: ' + text.slice(0, 200)); }
+  })
+  .then(result => {
+    if (result.success && Array.isArray(result.items)) {
+      menuItems = result.items.map(i => ({
+        ...i,
+        id: parseInt(i.id) || 0,
+        price: parseFloat(i.price) || 0,
+        stock: parseInt(i.stock) || 0,
+        image_path: i.image_path || '',
+        emoji: i.emoji || '🍽'
+      }));
+      nextId = Math.max(...menuItems.map(i => i.id), 0) + 1;
+      return menuItems;
+    }
+    throw new Error(result.message || 'Failed to load menu items.');
+  });
+}
 
 function loadIngredients() {
   return fetch('api.php', {
@@ -616,7 +647,9 @@ function showPage(page) {
   }
   if (page === 'reports') renderReports();
   if (page === 'orders') renderOrderHistory();
-  if (page === 'pos') renderMenuGrid();
+  if (page === 'pos') {
+    loadMenuFromDB().then(() => renderMenuGrid()).catch(() => renderMenuGrid());
+  }
 }
 
 // ============ CLOCK ============
@@ -660,8 +693,9 @@ function renderMenuGrid() {
   grid.innerHTML = items.map(item => {
     const stockStatus = item.stock === 0 ? 'out' : item.stock <= 5 ? 'low' : '';
     const unavail = item.status === 'unavailable' || item.stock === 0;
+    const icon = item.image_path ? `<img class="menu-photo" src="${item.image_path}" alt="${item.name}" onerror="this.style.display='none'" />` : `<span class="menu-emoji">${item.emoji||'🍽'}</span>`;
     return `<div class="menu-item ${unavail?'unavailable':''}" onclick="${unavail?'':(`addToCart(${item.id})`)}">
-      <span class="menu-emoji">${item.emoji||'🍽'}</span>
+      ${icon}
       <div class="menu-cat-badge">${item.category}</div>
       <div class="menu-name">${item.name}</div>
       <div class="menu-price">₱${item.price.toFixed(2)}</div>
@@ -680,7 +714,7 @@ function addToCart(id) {
     if (existing.qty >= item.stock) { toast('Max stock reached!','error'); return; }
     existing.qty++;
   } else {
-    cart.push({id, name:item.name, price:item.price, qty:1, emoji:item.emoji||'🍽'});
+    cart.push({id, name:item.name, price:item.price, qty:1, emoji:item.emoji||'🍽', image_path:item.image_path||''});
   }
   renderCart();
   toast(`${item.emoji||'🍽'} ${item.name} added!`, 'success');
@@ -718,7 +752,7 @@ function renderCart() {
     el.innerHTML = `<div class="cart-empty"><svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"/></svg><span>Cart is empty</span></div>`;
   } else {
     el.innerHTML = cart.map(c=>`<div class="cart-item">
-      <span style="font-size:24px;">${c.emoji}</span>
+      ${c.image_path ? `<img class="table-photo" src="${c.image_path}" alt="${c.name}" onerror="this.style.display='none'" />` : `<span style="font-size:24px;">${c.emoji}</span>`}
       <div class="cart-item-info">
         <div class="cart-item-name">${c.name}</div>
         <div class="cart-item-price">₱${(c.price*c.qty).toFixed(2)}</div>
@@ -833,7 +867,7 @@ function showReceipt(tx) {
   document.getElementById('receiptDate').textContent = d.toLocaleString('en-PH');
   document.getElementById('receiptTable').textContent = tx.table;
   document.getElementById('receiptItems').innerHTML = tx.items.map(i=>
-    `<div class="receipt-row"><span>${i.emoji} ${i.name} x${i.qty}</span><span>₱${(i.price*i.qty).toFixed(2)}</span></div>`
+    `<div class="receipt-row"><span>${i.image_path ? `<img class="table-photo" src="${i.image_path}" alt="${i.name}" onerror="this.style.display='none'" style="vertical-align:middle;" />` : `${i.emoji} `}${i.name} x${i.qty}</span><span>₱${(i.price*i.qty).toFixed(2)}</span></div>`
   ).join('');
   document.getElementById('rcSubtotal').textContent = '₱'+tx.subtotal.toFixed(2);
   document.getElementById('rcDiscountLabel').textContent = tx.discount_label || `Discount (${(tx.discount_percent || 0)}%)`;
@@ -856,7 +890,7 @@ function renderMenuTable() {
   const body = document.getElementById('menuTableBody');
   body.innerHTML = menuItems.map(item => `
     <tr>
-      <td><span style="font-size:20px;margin-right:8px;">${item.emoji||'🍽'}</span>${item.name}</td>
+      <td>${item.image_path ? `<img class="table-photo" src="${item.image_path}" alt="${item.name}" onerror="this.style.display='none'" />` : `<span style="font-size:20px;margin-right:8px;">${item.emoji||'🍽'}</span>`}${item.name}</td>
       <td><span class="tag tag-yellow">${item.category}</span></td>
       <td>₱${item.price.toFixed(2)}</td>
       <td>${item.stock}</td>
@@ -1072,7 +1106,7 @@ function renderReports() {
   // Top items
   const itemSales = {};
   transactions.forEach(t=>t.items.forEach(i=>{
-    if (!itemSales[i.name]) itemSales[i.name]={name:i.name,emoji:i.emoji,qty:0,rev:0};
+    if (!itemSales[i.name]) itemSales[i.name]={name:i.name,emoji:i.emoji,image_path:i.image_path||'',qty:0,rev:0};
     itemSales[i.name].qty+=i.qty; itemSales[i.name].rev+=i.price*i.qty;
   }));
   const top = Object.values(itemSales).sort((a,b)=>b.qty-a.qty).slice(0,5);
@@ -1080,7 +1114,7 @@ function renderReports() {
   document.getElementById('topItemsChart').innerHTML = top.length ? top.map((i,idx)=>`
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
       <span style="font-size:13px;color:var(--text3);min-width:16px;">${idx+1}</span>
-      <span style="font-size:18px;">${i.emoji||'🍽'}</span>
+      <span style="font-size:18px;">${i.image_path ? `<img src="${i.image_path}" alt="${i.name}" style="width:20px;height:20px;object-fit:cover;border-radius:6px;vertical-align:middle;" />` : i.emoji||'🍽'}</span>
       <div style="flex:1;">
         <div style="font-size:13px;font-weight:500;margin-bottom:4px;">${i.name}</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${(i.qty/maxQty)*100}%;background:var(--accent);"></div></div>
@@ -1094,7 +1128,7 @@ function renderReports() {
     <tr>
       <td>#${t.id}</td>
       <td>${t.table}</td>
-      <td>${t.items.map(i=>`${i.emoji} ${i.name}(${i.qty})`).join(', ')}</td>
+      <td>${t.items.map(i=>`${i.image_path ? `<img src="${i.image_path}" alt="${i.name}" style="width:18px;height:18px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:4px;" />` : i.emoji||'🍽'} ${i.name}(${i.qty})`).join(', ')}</td>
       <td>₱${t.subtotal.toFixed(2)}</td>
       <td style="color:var(--green);">${t.discount>0?'-₱'+t.discount.toFixed(2):'—'}</td>
       <td style="color:var(--accent);font-weight:600;">₱${t.total.toFixed(2)}</td>
@@ -1115,7 +1149,7 @@ function renderOrderHistory() {
     <tr>
       <td>#${t.id}</td>
       <td>${t.table}</td>
-      <td>${t.items.map(i=>`${i.emoji} ${i.name} x${i.qty}`).join(', ')}</td>
+      <td>${t.items.map(i=>`${i.image_path ? `<img src="${i.image_path}" alt="${i.name}" style="width:18px;height:18px;object-fit:cover;border-radius:4px;vertical-align:middle;margin-right:4px;" />` : i.emoji||'🍽'} ${i.name} x${i.qty}`).join(', ')}</td>
       <td style="color:var(--accent);font-weight:600;">₱${t.total.toFixed(2)}</td>
       <td style="color:var(--green);">${t.discount>0?'-₱'+t.discount.toFixed(2):'—'}</td>
       <td>₱${t.change.toFixed(2)}</td>
@@ -1140,7 +1174,7 @@ function toast(msg, type='info') {
 }
 
 // ============ INIT ============
-renderMenuGrid();
+loadMenuFromDB().then(() => renderMenuGrid()).catch(() => renderMenuGrid());
 </script>
 </body>
 </html>
